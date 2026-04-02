@@ -5,16 +5,30 @@
 (defconst my/os-windows-p (memq system-type '(windows-nt ms-dos cygwin)))
 
 (defconst my/gui-p (display-graphic-p))
-(defconst my/tty-p (not (display-graphic-p)))
+(defconst my/tty-p (not my/gui-p))
 
-(defconst my/wayland-p
+;; Session layer (desktop environment session)
+(defconst my/session-wayland-p
   (and my/os-linux-p
        (string= (or (getenv "XDG_SESSION_TYPE") "") "wayland")))
 
-(defconst my/x11-p
+(defconst my/session-x11-p
   (and my/os-linux-p
-       (or (string= (or (getenv "XDG_SESSION_TYPE") "") "x11")
-           (eq window-system 'x))))
+       (string= (or (getenv "XDG_SESSION_TYPE") "") "x11")))
+
+;; Emacs display backend layer
+(defconst my/backend-x-p
+  (eq window-system 'x))
+
+(defconst my/backend-pgtk-p
+  ;; pgtk builds on GNU/Linux often report 'pgtk.
+  (eq window-system 'pgtk))
+
+(defconst my/backend-ns-p
+  (eq window-system 'ns))
+
+(defconst my/backend-w32-p
+  (eq window-system 'w32))
 
 (defun my/platform-summary ()
   "Return a plist describing current platform capabilities."
@@ -22,8 +36,12 @@
         :window-system window-system
         :gui my/gui-p
         :tty my/tty-p
-        :wayland my/wayland-p
-        :x11 my/x11-p
+        :session-wayland my/session-wayland-p
+        :session-x11 my/session-x11-p
+        :backend-x my/backend-x-p
+        :backend-pgtk my/backend-pgtk-p
+        :backend-ns my/backend-ns-p
+        :backend-w32 my/backend-w32-p
         :native-comp (featurep 'native-compile)
         :treesit (and (fboundp 'treesit-available-p)
                       (treesit-available-p))))

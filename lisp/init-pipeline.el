@@ -24,6 +24,38 @@
 (require 'core-keymap)
 (require 'core-startup)
 
+(defun my/ui-init ()
+  "Initialize UI layer."
+  (when (and my/feature-ui my/gui-p)
+    (require 'ui-frame)
+    (require 'ui-font)
+    (require 'ui-theme)
+    (require 'ui-chrome)
+    (require 'ui-icons)
+    (require 'ui-modeline)
+    (require 'ui-popup)
+
+    (my/with-safe-init "ui-frame"
+      (my/ui-frame-init))
+
+    (my/with-safe-init "ui-font"
+      (my/ui-font-init))
+
+    (my/with-safe-init "ui-theme"
+      (my/ui-theme-init))
+
+    (my/with-safe-init "ui-chrome"
+      (my/ui-chrome-init))
+
+    (my/with-safe-init "ui-icons"
+      (my/ui-icons-init))
+
+    (my/with-safe-init "ui-modeline"
+      (my/ui-modeline-init))
+
+    (my/with-safe-init "ui-popup"
+      (my/ui-popup-init))))
+
 (defun my/init-run ()
   "Run the Emacs initialization pipeline."
   (interactive)
@@ -48,8 +80,11 @@
     (my/core-keymap-init)
     (my/core-startup-init))
 
+  (my/profile-stage "ui"
+    (my/with-safe-init "ui"
+      (my/ui-init)))
+
   ;; Future stages:
-  ;; (my/profile-stage "ui" ...)
   ;; (my/profile-stage "ux" ...)
   ;; (my/profile-stage "editor" ...)
   ;; (my/profile-stage "project" ...)
