@@ -5,6 +5,4 @@
   ;; Placeholder for font rendering, frame behavior, etc.
   t)
 
-(my/platform-gui-init)
-
 (provide 'platform-gui)

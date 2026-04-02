@@ -11,12 +11,11 @@
 (when (file-exists-p custom-file)
   (load custom-file nil 'nomessage))
 
-;; Add local lisp roots.
-(let ((default-directory (expand-file-name "lisp/" user-emacs-directory)))
-  (add-to-list 'load-path default-directory)
-  (add-to-list 'load-path (expand-file-name "bootstrap" default-directory))
-  (add-to-list 'load-path (expand-file-name "platform" default-directory))
-  (add-to-list 'load-path (expand-file-name "core" default-directory)))
+;; Add minimal local lisp roots required to load the pipeline itself.
+(let ((lisp-dir (expand-file-name "lisp/" user-emacs-directory)))
+  (add-to-list 'load-path lisp-dir)
+  (dolist (subdir '("bootstrap" "platform" "core"))
+    (add-to-list 'load-path (expand-file-name subdir lisp-dir))))
 
 (require 'init-pipeline)
 

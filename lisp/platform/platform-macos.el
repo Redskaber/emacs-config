@@ -4,6 +4,4 @@
   "macOS-specific initialization."
   t)
 
-(my/platform-macos-init)
-
 (provide 'platform-macos)

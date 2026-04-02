@@ -11,7 +11,8 @@
 (setq gc-cons-percentage 0.6)
 
 ;; Speed up startup by temporarily disabling file-name handlers.
-(defvar my/file-name-handler-alist-backup file-name-handler-alist)
+(defvar my/file-name-handler-alist-backup file-name-handler-alist
+  "Backup of `file-name-handler-alist' during early startup.")
 (setq file-name-handler-alist nil)
 
 ;; Prefer quiet startup UI.
@@ -20,10 +21,11 @@
       inhibit-startup-echo-area-message user-login-name
       initial-scratch-message nil)
 
-;; Native compilation cache directory (optional but recommended).
-(when (boundp 'native-comp-eln-load-path)
-  (add-to-list 'native-comp-eln-load-path
-               (expand-file-name "eln-cache/" user-emacs-directory)))
+;; Native compilation cache directory (preferred modern API).
+(when (and (fboundp 'startup-redirect-eln-cache)
+           (featurep 'native-compile))
+  (startup-redirect-eln-cache
+   (expand-file-name "eln-cache/" user-emacs-directory)))
 
 ;; Frame chrome policy (safe defaults).
 (push '(menu-bar-lines . 0) default-frame-alist)

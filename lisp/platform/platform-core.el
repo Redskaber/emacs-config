@@ -16,10 +16,6 @@
        (or (string= (or (getenv "XDG_SESSION_TYPE") "") "x11")
            (eq window-system 'x))))
 
-(defun my/executable-available-p (cmd)
-  "Return non-nil if CMD exists in PATH."
-  (and (stringp cmd) (executable-find cmd)))
-
 (defun my/platform-summary ()
   "Return a plist describing current platform capabilities."
   (list :system-type system-type
@@ -29,19 +25,30 @@
         :wayland my/wayland-p
         :x11 my/x11-p
         :native-comp (featurep 'native-compile)
-        :treesit (fboundp 'treesit-available-p)))
+        :treesit (and (fboundp 'treesit-available-p)
+                      (treesit-available-p))))
 
 (defun my/platform-init ()
   "Initialize platform layer."
   (when my/os-linux-p
-    (require 'platform-linux))
+    (require 'platform-linux)
+    (my/platform-linux-init))
+
   (when my/os-macos-p
-    (require 'platform-macos))
+    (require 'platform-macos)
+    (my/platform-macos-init))
+
   (when my/os-windows-p
-    (require 'platform-windows))
+    (require 'platform-windows)
+    (my/platform-windows-init))
+
   (if my/gui-p
-      (require 'platform-gui)
-    (require 'platform-tty))
+      (progn
+        (require 'platform-gui)
+        (my/platform-gui-init))
+    (require 'platform-tty)
+    (my/platform-tty-init))
+
   (message "[platform] %S" (my/platform-summary)))
 
 (provide 'platform-core)

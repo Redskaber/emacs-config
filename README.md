@@ -31,6 +31,9 @@
 │   │   ├── core-hooks.el
 │   │   ├── core-logging.el
 │   │   ├── core-errors.el
+│   │   ├── core-lib.el
+│   │   ├── core-feature-flags.el
+│   │   ├── core-startup.el
 │   │   └── core-keymap.el
 │   │
 │   ├── ui/                       ; 视觉层（theme/frame/font/modeline）

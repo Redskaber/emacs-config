@@ -5,6 +5,4 @@
   ;; Reserved for Linux-specific env fixes, clipboard backends, etc.
   t)
 
-(my/platform-linux-init)
-
 (provide 'platform-linux)

@@ -5,6 +5,4 @@
   ;; Placeholder for terminal-only settings.
   t)
 
-(my/platform-tty-init)
-
 (provide 'platform-tty)

@@ -4,6 +4,4 @@
   "Windows-specific initialization."
   t)
 
-(my/platform-windows-init)
-
 (provide 'platform-windows)
