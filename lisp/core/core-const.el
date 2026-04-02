@@ -19,6 +19,7 @@
   '("bootstrap"
     "platform"
     "core"
+    "manifests"
     "ui"
     "ux"
     "editor"
@@ -27,7 +28,8 @@
     "prog"
     "lang"
     "app"
-    "ops")
+    "ops"
+  )
   "Managed subdirectories under `my/lisp-dir'.")
 
 (provide 'core-const)

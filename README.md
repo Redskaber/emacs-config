@@ -1,5 +1,19 @@
 # emacs
 
+## Design Principles
+
+- **Thin entrypoints**: `early-init.el` and `init.el` remain minimal.
+- **Explicit pipeline**: startup is organized into deterministic stages.
+- **Layered architecture**: each directory represents a strict responsibility boundary.
+- **Dependency inversion**: language modules are adapters, not logic containers.
+- **Capability-driven behavior**: GUI/TTY/OS/package availability are treated as runtime capabilities.
+- **Composable modules**: every module exposes a predictable lifecycle contract.
+- **Safe degradation**: failures in optional modules must not break startup.
+- **Operational visibility**: profiling, diagnostics, health checks, and benchmarks are first-class.
+
+
+## Arch
+
 ```bash
 ~/.config/emacs/
 ├── early-init.el                 ; 极薄启动前入口
@@ -34,7 +48,20 @@
 │   │   ├── core-lib.el
 │   │   ├── core-feature-flags.el
 │   │   ├── core-startup.el
+│   │   ├── core-module.el        ; 模块注册/调度系统
+│   │   ├── core-require.el       ; 安全 require / lazy require / capability require
 │   │   └── core-keymap.el
+│   │
+│   ├── manifests/                ; 阶段注册表 / manifest 驱动
+│   │   ├── manifest-ui.el
+│   │   ├── manifest-ux.el
+│   │   ├── manifest-editor.el
+│   │   ├── manifest-project.el
+│   │   ├── manifest-vcs.el
+│   │   ├── manifest-prog.el
+│   │   ├── manifest-lang.el
+│   │   ├── manifest-app.el
+│   │   └── manifest-ops.el
 │   │
 │   ├── ui/                       ; 视觉层（theme/frame/font/modeline）
 │   │   ├── ui-frame.el
@@ -125,4 +152,22 @@
 └── etc/                          ; 本地模板、脚本、字典等
 
 ```
+- 现代, 高效，敏捷，科学，美观、跨平台, 层级划分，层级功能性细分，管道式流水线，插件加载，依赖倒置，边界明确，策略选择,生命周期明确
+
+
+## Depand
+```bash
+bootstrap
+   ↓
+platform
+   ↓
+core
+   ↓
+ui / ux / editor / project / vcs / prog
+                    ↓        ↓     ↓
+                   lang      app   ops
+
+```
+
+
 

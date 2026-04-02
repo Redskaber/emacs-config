@@ -14,6 +14,16 @@
   :type 'boolean
   :group 'my/features)
 
+(defcustom my/feature-ux-helpful t
+  "Enable helpful integration."
+  :type 'boolean
+  :group 'my/features)
+
+(defcustom my/feature-ux-embark t
+  "Enable embark integration."
+  :type 'boolean
+  :group 'my/features)
+
 (defcustom my/feature-editor t
   "Enable editor layer."
   :type 'boolean
@@ -55,7 +65,8 @@
   :group 'my/features)
 
 (defun my/core-feature-flags-init ()
-  "Initialize feature flags."
+  "Initialize feature flags subsystem."
   t)
 
 (provide 'core-feature-flags)
+;;; core-feature-flags.el ends here

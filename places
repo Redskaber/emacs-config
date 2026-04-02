@@ -1,7 +1,7 @@
 ;;; -*- coding: utf-8; mode: lisp-data -*-
-(("/home/kilig/.config/emacs/"
+(("/home/kilig/.config/emacs/custom.el" . 552)
+ ("/home/kilig/.config/emacs/"
   (dired-filename . "/home/kilig/.config/emacs/lisp"))
  ("/home/kilig/.config/emacs/lisp/"
   (dired-filename . "/home/kilig/.config/emacs/lisp/init-pipeline.el"))
- ("/home/kilig/.config/emacs/custom.el" . 552)
  ("/home/kilig/.config/emacs/init.el" . 857))

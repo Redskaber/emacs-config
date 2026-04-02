@@ -14,7 +14,7 @@
 ;; Add minimal local lisp roots required to load the pipeline itself.
 (let ((lisp-dir (expand-file-name "lisp/" user-emacs-directory)))
   (add-to-list 'load-path lisp-dir)
-  (dolist (subdir '("bootstrap" "platform" "core"))
+  (dolist (subdir '("bootstrap" "platform" "core" "manifests"))
     (add-to-list 'load-path (expand-file-name subdir lisp-dir))))
 
 (require 'init-pipeline)
