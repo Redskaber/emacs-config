@@ -1,8 +1,9 @@
-# remove build
+# dirs
+.cache
 cache
 eln-cache
 elpa
-
-
-
+var
+# files
+places
 
