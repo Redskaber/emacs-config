@@ -1,19 +1,21 @@
-;;; init-pipeline.el --- Top-level initialization pipeline -*- lexical-binding: t; -*-
+;;; init-pipeline.el --- Top-level startup orchestration -*- lexical-binding: t; -*-
 ;;; Commentary:
-;;; Orchestrates startup in explicit stages via declarative manifests.
+;;; Deterministic, manifest-driven startup pipeline with stage dependencies.
 ;;; Code:
 
-(require 'bootstrap-profile)
+;; Bootstrap
 (require 'bootstrap-core)
 (require 'bootstrap-package)
 (require 'bootstrap-use-package)
+(require 'bootstrap-profile)
 
+;; Platform
 (require 'platform-core)
 
+;; Core
 (require 'core-const)
 (require 'core-lib)
 (require 'core-paths)
-(require 'core-feature-flags)
 (require 'core-env)
 (require 'core-encoding)
 (require 'core-performance)
@@ -21,135 +23,92 @@
 (require 'core-hooks)
 (require 'core-logging)
 (require 'core-errors)
-(require 'core-keymap)
+(require 'core-require)
+(require 'core-module)
+(require 'core-feature-flags)
 (require 'core-startup)
+(require 'core-keymap)
 
-(require 'manifest-ui)
-(require 'manifest-ux)
-(require 'manifest-editor)
+;; Registry (pulls manifests transitively)
+(require 'manifest-registry)
 
-(defvar my/project-modules nil
-  "Declarative module specifications for project layer.")
+(defun my/init-bootstrap-stage ()
+  "Run bootstrap stage."
+  (my/with-stage-sentinel 'bootstrap
+    (my/profile-stage "bootstrap"
+      (my/bootstrap-core-init)
+      (my/bootstrap-package-init)
+      (my/bootstrap-use-package-init))))
 
-(defvar my/vcs-modules nil
-  "Declarative module specifications for VCS layer.")
+(defun my/init-platform-stage ()
+  "Run platform/capability detection stage."
+  (my/with-stage-sentinel 'platform
+    (my/profile-stage "platform"
+      (my/platform-core-init))))
 
-(defvar my/prog-modules nil
-  "Declarative module specifications for programming layer.")
+(defun my/init-core-stage ()
+  "Run core infrastructure stage."
+  (my/with-stage-sentinel 'core
+    (my/profile-stage "core"
+      ;; Order matters here.
+      (my/core-paths-init)
+      (my/core-logging-init)
+      (my/core-errors-init)
+      (my/core-require-init)
+      (my/core-module-init)
+      (my/core-feature-flags-init)
+      (my/core-env-init)
+      (my/core-encoding-init)
+      (my/core-performance-init)
+      (my/core-state-init)
+      (my/core-hooks-init)
+      (my/core-startup-init)
+      (my/core-keymap-init))))
 
-(defvar my/lang-modules nil
-  "Declarative module specifications for language layer.")
+(defun my/init-run-stage (stage)
+  "Run a single registered STAGE via stage registry."
+  (my/profile-stage (symbol-name stage)
+    (my/module-run-stage-by-spec stage)))
 
-(defvar my/app-modules nil
-  "Declarative module specifications for app layer.")
+(defun my/init-run-all-layer-stages ()
+  "Run all registered layer stages in declarative order."
+  (dolist (stage (my/stage-names))
+    (my/init-run-stage stage)))
 
-(defvar my/ops-modules nil
-  "Declarative module specifications for ops layer.")
+(defun my/init-reset-state ()
+  "Reset startup runtime records."
+  (setq my/profile-records nil
+        my/module-run-records nil
+        my/module-deferred-jobs nil)
+  ;; NOTE:
+  ;; Do NOT clear stage sentinels here for normal runtime, otherwise
+  ;; repeated `my/init-run' will re-register hooks and global modes.
+  )
 
-(defun my/module--feature-enabled-p (feature)
-  "Return non-nil when FEATURE gate allows module activation.
-FEATURE may be nil or a symbol bound to a boolean variable."
-  (cond
-   ((null feature) t)
-   ((and (symbolp feature) (boundp feature))
-    (symbol-value feature))
-   (t nil)))
-
-(defun my/module--predicate-p (predicate)
-  "Return non-nil when PREDICATE passes.
-PREDICATE may be nil, a symbol variable, or a function symbol / lambda."
-  (cond
-   ((null predicate) t)
-   ((and (symbolp predicate)
-         (boundp predicate)
-         (not (fboundp predicate)))
-    (symbol-value predicate))
-   ((functionp predicate)
-    (funcall predicate))
-   ((and (symbolp predicate) (fboundp predicate))
-    (funcall predicate))
-   (t nil)))
-
-(defun my/module-enabled-p (spec)
-  "Return non-nil if module SPEC should be enabled."
-  (let ((feature   (plist-get spec :feature))
-        (predicate (plist-get spec :predicate)))
-    (and (my/module--feature-enabled-p feature)
-         (my/module--predicate-p predicate))))
-
-(defun my/module-name (spec)
-  "Return normalized module name string from SPEC."
-  (let ((name (plist-get spec :name)))
-    (cond
-     ((symbolp name) (symbol-name name))
-     ((stringp name) name)
-     (t "unnamed-module"))))
-
-(defun my/run-module (spec)
-  "Load and initialize module SPEC safely.
-
-  SPEC supports:
-  :name       Symbol or string, human-readable module name.
-  :feature    Optional feature flag variable symbol.
-  :predicate  Optional extra gate, variable or callable.
-  :require    Feature symbol to require.
-  :init       Initialization function."
-  (let ((name    (my/module-name spec))
-        (req     (plist-get spec :require))
-        (init-fn (plist-get spec :init)))
-    (when (my/module-enabled-p spec)
-      (my/with-safe-init name
-        (when req
-          (require req))
-        (when init-fn
-          (if (functionp init-fn)
-              (funcall init-fn)
-            (my/log-warn "Init function not callable for module: %s" name)))))))
-
-(defun my/run-modules (stage modules)
-  "Run MODULES within STAGE profiling boundary."
-  (my/profile-stage stage
-    (dolist (spec modules)
-      (my/run-module spec))))
+(defun my/init-force-rerun ()
+  "Force clear sentinels and rerun the complete startup pipeline.
+Useful during development."
+  (interactive)
+  (my/stage-sentinel-clear)
+  (my/init-run))
 
 (defun my/init-run ()
-  "Run the Emacs initialization pipeline."
+  "Run the complete startup pipeline."
   (interactive)
+  (my/init-reset-state)
 
-  (my/profile-stage "bootstrap"
-    (my/bootstrap-core-init)
-    (my/bootstrap-package-init)
-    (my/bootstrap-use-package-init))
+  ;; Base runtime
+  (my/init-bootstrap-stage)
+  (my/init-platform-stage)
+  (my/init-core-stage)
 
-  (my/profile-stage "platform"
-    (my/platform-init))
+  ;; Layered runtime
+  (my/init-run-all-layer-stages)
 
-  (my/profile-stage "core"
-    (my/core-paths-init)
-    (my/core-feature-flags-init)
-    (my/core-env-init)
-    (my/core-encoding-init)
-    (my/core-performance-init)
-    (my/core-state-init)
-    (my/core-hooks-init)
-    (my/core-logging-init)
-    (my/core-errors-init)
-    (my/core-keymap-init)
-    (my/core-startup-init))
-
-  (my/run-modules "ui" my/ui-modules)
-  (my/run-modules "ux" my/ux-modules)
-  (my/run-modules "editor" my/editor-modules)
-
-  ;; Reserved future stages (safe to keep empty for now).
-  (my/run-modules "project" my/project-modules)
-  (my/run-modules "vcs" my/vcs-modules)
-  (my/run-modules "prog" my/prog-modules)
-  (my/run-modules "lang" my/lang-modules)
-  (my/run-modules "app" my/app-modules)
-  (my/run-modules "ops" my/ops-modules)
-
-  (my/profile-stage "post-init"
+  ;; Finalize
+  (my/with-stage-sentinel 'post-init
+    (my/module-report)
+    (my/module-deferred-report)
     (my/startup-finalize)))
 
 (provide 'init-pipeline)

@@ -1,6 +1,7 @@
 ;;; core-startup.el --- Startup lifecycle management -*- lexical-binding: t; -*-
 
 (require 'bootstrap-profile)
+(require 'core-feature-flags)
 
 (defcustom my/runtime-gc-cons-threshold (* 64 1024 1024)
   "GC threshold used after startup."

@@ -11,26 +11,31 @@
 
     (:name ux-completion-at-point
      :feature my/feature-ux
+     :after ux-completion-read
      :require ux-completion-at-point
      :init my/ux-completion-at-point-init)
 
     (:name ux-actions
      :feature my/feature-ux
+     :after ux-completion-read
      :require ux-actions
      :init my/ux-actions-init)
 
     (:name ux-search
      :feature my/feature-ux
+     :after ux-completion-read
      :require ux-search
      :init my/ux-search-init)
 
     (:name ux-help
      :feature my/feature-ux
+     :after (ux-completion-read ux-actions)
      :require ux-help
      :init my/ux-help-init)
 
     (:name ux-history
      :feature my/feature-ux
+     :after ux-completion-read
      :require ux-history
      :init my/ux-history-init))
   "Declarative UX module specifications.")

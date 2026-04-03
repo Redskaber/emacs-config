@@ -1,5 +1,8 @@
 ;;; core-state.el --- State, backup, autosave, history policy -*- lexical-binding: t; -*-
 
+(require 'core-const)
+(require 'core-lib)
+
 (defun my/core-state-init ()
   "Configure state persistence and file hygiene."
   ;; Keep backup and autosave out of project trees.
@@ -13,8 +16,7 @@
   (dolist (dir (list (expand-file-name "backup/" my/var-dir)
                      (expand-file-name "auto-save/" my/var-dir)
                      (expand-file-name "auto-save/sessions/" my/var-dir)))
-    (unless (file-directory-p dir)
-      (make-directory dir t)))
+    (my/ensure-dir dir))
 
   ;; Lockfiles often annoy in modern workflows.
   (setq create-lockfiles nil)

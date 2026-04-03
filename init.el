@@ -18,7 +18,6 @@
     (add-to-list 'load-path (expand-file-name subdir lisp-dir))))
 
 (require 'init-pipeline)
-
 (my/init-run)
 
 ;;; init.el ends here

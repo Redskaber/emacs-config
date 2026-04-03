@@ -1,0 +1,2 @@
+;; Generated package description from gptel.el  -*- no-byte-compile: t; lexical-binding:t -*-
+(define-package "gptel" "0.9.9.4" "Interact with ChatGPT or other LLMs" '((emacs "27.1") (transient "0.7.4") (compat "30.1.0.0")) :commit "d221329ee3aa0198ad51c003a8d94b2af3a72dce" :authors '(("Karthik Chikmagalur" . "karthik.chikmagalur@gmail.com")) :maintainer '("Karthik Chikmagalur" . "karthik.chikmagalur@gmail.com") :keywords '("convenience" "tools") :url "https://github.com/karthink/gptel")

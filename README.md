@@ -53,6 +53,7 @@
 │   │   └── core-keymap.el
 │   │
 │   ├── manifests/                ; 阶段注册表 / manifest 驱动
+│   │   ├── manifest-registry.el
 │   │   ├── manifest-ui.el
 │   │   ├── manifest-ux.el
 │   │   ├── manifest-editor.el
@@ -156,6 +157,7 @@
 
 
 ## Depand
+
 ```bash
 bootstrap
    ↓
@@ -164,10 +166,54 @@ platform
 core
    ↓
 ui / ux / editor / project / vcs / prog
-                    ↓        ↓     ↓
-                   lang      app   ops
+          ↓       ↓       ↓      ↓
+                lang      app    ops
 
 ```
 
+- lang: 主要依赖 prog，可选依赖 project
+- app: 主要依赖 project / vcs / prog / ux 的部分能力（不是强依赖全部）
+- ops: 原则上只依赖 core，但可观察所有层；不要强耦合业务层
+
+核心原则: 
+- ops 是“观测层”，不是“业务层附庸”；
+- app 是“面向用户工作流的应用聚合层”，不是语言层的一部分。
 
 
+## Template
+
+```elisp
+;;; xxx.el --- One-line summary -*- lexical-binding: t; -*-
+;;; Commentary:
+;;; Short description.
+;;; Code:
+
+(require 'core-lib)      ;; if needed
+(require 'core-const)    ;; if needed
+(require 'core-require)  ;; if needed
+
+(defgroup my/xxx nil
+  "Description."
+  :group 'my)
+
+(defcustom my/xxx-foo ...
+  "..."
+  :type '...
+  :group 'my/xxx)
+
+(defun my/xxx--hook ()
+  "Hook entry."
+  ...)
+
+(defun my/xxx-init ()
+  "Initialize xxx module."
+  ...)
+
+(provide 'xxx)
+;;; xxx.el ends here
+
+```
+```
+
+
+```

@@ -46,7 +46,7 @@
         :treesit (and (fboundp 'treesit-available-p)
                       (treesit-available-p))))
 
-(defun my/platform-init ()
+(defun my/platform-core-init ()
   "Initialize platform layer."
   (when my/os-linux-p
     (require 'platform-linux)
