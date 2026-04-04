@@ -10,7 +10,7 @@
 (defun my/ops-startup-summary ()
   "Display startup summary in echo area."
   (interactive)
-  (let* ((mod (my/module-summary))
+  (let* ((mod (my/runtime-module-summary))
          (total (plist-get mod :total))
          (ok (plist-get mod :ok))
          (skipped (plist-get mod :skipped))

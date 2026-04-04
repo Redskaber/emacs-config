@@ -17,7 +17,7 @@
 
 (defun my/lang-elisp--setup-mode ()
   "Configure Emacs Lisp editing defaults."
-  (setq-local mode-name "Elisp")
+  (setq-local mode-name "Elisp"))
 
 (defun my/lang-elisp--setup-eval-bindings ()
   "Install Emacs Lisp evaluation bindings."

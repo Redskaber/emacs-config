@@ -38,7 +38,7 @@
   (my/app-dired--setup-core)
   (my/app-dired--setup-aux)
   (global-set-key (kbd "C-x C-j") #'dired-jump)
-  (global-set-key (kbd "C-c f e") #'my/app-dired-open-config))
+  (global-set-key (kbd "C-x C-p") #'my/app-dired-open-config))
 
 (provide 'app-dired)
 ;;; app-dired.el ends here
