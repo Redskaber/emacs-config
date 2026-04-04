@@ -4,7 +4,7 @@
 ;;; Code:
 ;;; 不建议同时“强依赖 electric-pair + smartparens 全开 ?
 
-(require 'core-lib)
+(require 'kernel-lib)
 
 (defgroup my/editor-pairs nil
   "Pair insertion and structural editing."

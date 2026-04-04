@@ -4,7 +4,7 @@
 ;;; Code:
 ;;; buffer-local 策略 ?
 
-(require 'core-lib)
+(require 'kernel-lib)
 
 (defgroup my/editor-whitespace nil
   "Whitespace hygiene."

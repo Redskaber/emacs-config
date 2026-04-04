@@ -5,7 +5,7 @@
 
 (require 'cl-lib)
 
-(require 'core-lib)
+(require 'kernel-lib)
 
 (defgroup my/editor-indent nil
   "Indentation policy."

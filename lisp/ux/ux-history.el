@@ -5,8 +5,8 @@
 ;;; - recentf
 ;;; Code:
 
-(require 'core-const)
-(require 'core-lib)
+(require 'kernel-const)
+(require 'kernel-lib)
 
 (defgroup my/ux-history nil
   "History and recent navigation UX."

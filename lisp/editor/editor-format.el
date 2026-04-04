@@ -3,10 +3,10 @@
 ;;; Buffer formatting strategy with Apheleia-first policy.
 ;;; Code:
 ;;; buffer-local 策略 ?
-;;; global-set-key to core-keymap.el ?
+;;; global-set-key to kernel-keymap.el ?
 
 
-(require 'core-lib)
+(require 'kernel-lib)
 
 (defgroup my/editor-format nil
   "Formatting orchestration."

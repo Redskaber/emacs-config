@@ -2,10 +2,10 @@
 ;;; Commentary:
 ;;; Folding strategy with built-in hideshow as default backend.
 ;;; Code:
-;;; global-set-key to core-keymap.el ?
+;;; global-set-key to kernel-keymap.el ?
 
 
-(require 'core-lib)
+(require 'kernel-lib)
 
 (defgroup my/editor-folding nil
   "Code folding abstraction."

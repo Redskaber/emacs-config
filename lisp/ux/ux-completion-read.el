@@ -7,7 +7,7 @@
 ;;; - consult
 ;;; Code:
 
-(require 'core-lib)
+(require 'kernel-lib)
 
 (defgroup my/ux-completion-read nil
   "Minibuffer completion UX."

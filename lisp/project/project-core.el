@@ -7,9 +7,9 @@
 (require 'cl-lib)
 (require 'subr-x)
 
-(require 'core-lib)
-(require 'core-logging)
-(require 'core-keymap)
+(require 'kernel-lib)
+(require 'kernel-logging)
+(require 'kernel-keymap)
 
 (defgroup my/project nil
   "Project workflow."
@@ -111,7 +111,7 @@
 
 (defun my/project-register-keybindings ()
   "Register project keybindings."
-  ;; 建议你最终统一挂到 core-keymap leader 上；这里先提供兜底。
+  ;; 建议你最终统一挂到 kernel-keymap leader 上；这里先提供兜底。
   (define-key my/project-mode-map (kbd "C-c p p") #'my/project-switch)
   (define-key my/project-mode-map (kbd "C-c p f") #'my/project-find-file)
   (define-key my/project-mode-map (kbd "C-c p d") #'my/project-dired)

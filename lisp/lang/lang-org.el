@@ -3,8 +3,8 @@
 ;;; Thin glue for Org authoring and note workflows.
 ;;; Code:
 
-(require 'core-const)
-(require 'core-lib)
+(require 'kernel-const)
+(require 'kernel-lib)
 (require 'org)
 
 (defgroup my/lang-org nil

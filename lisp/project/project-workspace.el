@@ -7,7 +7,7 @@
 (require 'subr-x)
 
 (require 'project-core)
-(require 'core-logging)
+(require 'kernel-logging)
 
 (defgroup my/project-workspace nil
   "Project workspace integration."

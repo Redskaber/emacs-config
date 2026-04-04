@@ -6,7 +6,7 @@
 ;;; Built on standard CAPF for maximal composability.
 ;;; Code:
 
-(require 'core-lib)
+(require 'kernel-lib)
 
 (defgroup my/ux-completion-at-point nil
   "In-buffer completion UX."

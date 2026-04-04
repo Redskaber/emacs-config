@@ -5,7 +5,7 @@
 ;;; project policy separate from project/* modules.
 ;;; Code:
 
-(require 'core-lib)
+(require 'kernel-lib)
 
 (defgroup my/ux-search nil
   "Search UX workflows."

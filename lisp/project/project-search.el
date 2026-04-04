@@ -6,7 +6,7 @@
 (require 'subr-x)
 
 (require 'project-core)
-(require 'core-logging)
+(require 'kernel-logging)
 
 (defgroup my/project-search nil
   "Project search settings."

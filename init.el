@@ -6,15 +6,13 @@
 (defconst my/emacs-start-time (current-time)
   "Timestamp captured at the beginning of init.")
 
-;; Keep Custom out of init.el.
 (setq custom-file (expand-file-name "custom.el" user-emacs-directory))
 (when (file-exists-p custom-file)
   (load custom-file nil 'nomessage))
 
-;; Add minimal local lisp roots required to load the pipeline itself.
 (let ((lisp-dir (expand-file-name "lisp/" user-emacs-directory)))
   (add-to-list 'load-path lisp-dir)
-  (dolist (subdir '("bootstrap" "platform" "core" "manifests"))
+  (dolist (subdir '("bootstrap" "platform" "kernel" "runtime" "manifest"))
     (add-to-list 'load-path (expand-file-name subdir lisp-dir))))
 
 (require 'init-pipeline)

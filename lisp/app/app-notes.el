@@ -3,7 +3,7 @@
 ;;; Org/Markdown oriented note capture and notebook access.
 ;;; Code:
 
-(require 'core-const)
+(require 'kernel-const)
 
 (defgroup my/app-notes nil
   "Notes and knowledge workflow."

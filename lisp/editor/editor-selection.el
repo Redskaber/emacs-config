@@ -2,9 +2,9 @@
 ;;; Commentary:
 ;;; Better selection workflows, region expansion, and multiple cursors.
 ;;; Code:
-;;; global-set-key to core-keymap.el ?
+;;; global-set-key to kernel-keymap.el ?
 
-(require 'core-lib)
+(require 'kernel-lib)
 
 (defgroup my/editor-selection nil
   "Selection ergonomics."

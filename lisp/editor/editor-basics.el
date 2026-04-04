@@ -3,7 +3,7 @@
 ;;; Language-agnostic core editing behaviors and sane defaults.
 ;;; Code:
 
-(require 'core-lib)
+(require 'kernel-lib)
 
 (defgroup my/editor-basics nil
   "Basic editing defaults."

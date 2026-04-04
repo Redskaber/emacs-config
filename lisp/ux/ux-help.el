@@ -5,7 +5,7 @@
 ;;; - helpful
 ;;; Code:
 
-(require 'core-lib)
+(require 'kernel-lib)
 
 (defgroup my/ux-help nil
   "Help and discoverability UX."

@@ -2,12 +2,12 @@
 ;;; Commentary:
 ;;; Snippet engine setup and policy.
 ;;; Code:
-;;; global-set-key to core-keymap.el ?
+;;; global-set-key to kernel-keymap.el ?
 
 (require 'cl-lib)
 
-(require 'core-lib)
-(require 'core-const)
+(require 'kernel-lib)
+(require 'kernel-const)
 
 (defgroup my/editor-snippets nil
   "Snippet infrastructure."

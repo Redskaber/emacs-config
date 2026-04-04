@@ -5,7 +5,7 @@
 ;;; - embark-consult
 ;;; Code:
 
-(require 'core-lib)
+(require 'kernel-lib)
 
 (defgroup my/ux-actions nil
   "Action and context dispatch UX."

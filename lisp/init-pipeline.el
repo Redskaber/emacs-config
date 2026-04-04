@@ -1,6 +1,7 @@
 ;;; init-pipeline.el --- Top-level startup orchestration -*- lexical-binding: t; -*-
 ;;; Commentary:
-;;; Deterministic, manifest-driven startup pipeline with stage dependencies.
+;;; Deterministic startup pipeline:
+;;; bootstrap -> platform -> kernel -> runtime(stages) -> post-init
 ;;; Code:
 
 ;; Bootstrap
@@ -12,84 +13,76 @@
 ;; Platform
 (require 'platform-core)
 
-;; Core
-(require 'core-const)
-(require 'core-lib)
-(require 'core-paths)
-(require 'core-env)
-(require 'core-encoding)
-(require 'core-performance)
-(require 'core-state)
-(require 'core-hooks)
-(require 'core-logging)
-(require 'core-errors)
-(require 'core-require)
-(require 'core-module)
-(require 'core-feature-flags)
-(require 'core-startup)
-(require 'core-keymap)
+;; Kernel
+(require 'kernel-const)
+(require 'kernel-lib)
+(require 'kernel-paths)
+(require 'kernel-logging)
+(require 'kernel-errors)
+(require 'kernel-require)
+(require 'kernel-env)
+(require 'kernel-encoding)
+(require 'kernel-performance)
+(require 'kernel-state)
+(require 'kernel-hooks)
+(require 'kernel-startup)
+(require 'kernel-keymap)
 
-;; Registry (pulls manifests transitively)
-(require 'manifest-registry)
+;; Runtime
+(require 'runtime-feature)
+(require 'runtime-stage-state)
+(require 'runtime-module-state)
+(require 'runtime-manifest)
+(require 'runtime-registry)
+(require 'runtime-graph)
+(require 'runtime-module-runner)
+(require 'runtime-stage)
+(require 'runtime-pipeline)
 
 (defun my/init-bootstrap-stage ()
   "Run bootstrap stage."
-  (my/with-stage-sentinel 'bootstrap
-    (my/profile-stage "bootstrap"
-      (my/bootstrap-core-init)
-      (my/bootstrap-package-init)
-      (my/bootstrap-use-package-init))))
+  (my/profile-stage "bootstrap"
+    (my/bootstrap-core-init)
+    (my/bootstrap-package-init)
+    (my/bootstrap-use-package-init)))
 
 (defun my/init-platform-stage ()
-  "Run platform/capability detection stage."
-  (my/with-stage-sentinel 'platform
-    (my/profile-stage "platform"
-      (my/platform-core-init))))
+  "Run platform capability detection stage."
+  (my/profile-stage "platform"
+    (my/platform-core-init)))
 
-(defun my/init-core-stage ()
-  "Run core infrastructure stage."
-  (my/with-stage-sentinel 'core
-    (my/profile-stage "core"
-      ;; Order matters here.
-      (my/core-paths-init)
-      (my/core-logging-init)
-      (my/core-errors-init)
-      (my/core-require-init)
-      (my/core-module-init)
-      (my/core-feature-flags-init)
-      (my/core-env-init)
-      (my/core-encoding-init)
-      (my/core-performance-init)
-      (my/core-state-init)
-      (my/core-hooks-init)
-      (my/core-startup-init)
-      (my/core-keymap-init))))
+(defun my/init-kernel-stage ()
+  "Run kernel infrastructure stage."
+  (my/profile-stage "kernel"
+    ;; Order matters here.
+    (my/kernel-paths-init)
+    (my/kernel-logging-init)
+    (my/kernel-errors-init)
+    (my/kernel-require-init)
+    (my/runtime-feature-init)
+    (my/kernel-env-init)
+    (my/kernel-encoding-init)
+    (my/kernel-performance-init)
+    (my/kernel-state-init)
+    (my/kernel-hooks-init)
+    (my/kernel-startup-init)
+    (my/kernel-keymap-init)))
 
-(defun my/init-run-stage (stage)
-  "Run a single registered STAGE via stage registry."
-  (my/profile-stage (symbol-name stage)
-    (my/module-run-stage-by-spec stage)))
-
-(defun my/init-run-all-layer-stages ()
-  "Run all registered layer stages in declarative order."
-  (dolist (stage (my/stage-names))
-    (my/init-run-stage stage)))
+(defun my/init-post-stage ()
+  "Run post-init finalization."
+  (my/profile-stage "post-init"
+    (my/runtime-final-report)
+    (my/startup-finalize)))
 
 (defun my/init-reset-state ()
   "Reset startup runtime records."
-  (setq my/profile-records nil
-        my/module-run-records nil
-        my/module-deferred-jobs nil)
-  ;; NOTE:
-  ;; Do NOT clear stage sentinels here for normal runtime, otherwise
-  ;; repeated `my/init-run' will re-register hooks and global modes.
-  )
+  (setq my/profile-records nil)
+  (my/runtime-reset-state))
 
 (defun my/init-force-rerun ()
-  "Force clear sentinels and rerun the complete startup pipeline.
-Useful during development."
+  "Force clear sentinels and rerun the complete startup pipeline."
   (interactive)
-  (my/stage-sentinel-clear)
+  (my/runtime-force-reset-state)
   (my/init-run))
 
 (defun my/init-run ()
@@ -100,16 +93,13 @@ Useful during development."
   ;; Base runtime
   (my/init-bootstrap-stage)
   (my/init-platform-stage)
-  (my/init-core-stage)
+  (my/init-kernel-stage)
 
   ;; Layered runtime
-  (my/init-run-all-layer-stages)
+  (my/runtime-run-all-stages)
 
   ;; Finalize
-  (my/with-stage-sentinel 'post-init
-    (my/module-report)
-    (my/module-deferred-report)
-    (my/startup-finalize)))
+  (my/init-post-stage))
 
 (provide 'init-pipeline)
 ;;; init-pipeline.el ends here
