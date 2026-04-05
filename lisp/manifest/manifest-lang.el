@@ -1,7 +1,10 @@
-;;; manifest-lang.el --- Language adapter manifest -*- lexical-binding: t; -*-
+;;; manifest-lang.el --- Language adapter manifest  -*- lexical-binding: t; -*-
+;;; Code:
 
 (defconst my/lang-modules
   '((:name lang-elisp
+     :description "Emacs Lisp development environment."
+     :tags (:lang :elisp)
      :feature my/feature-lang-elisp
      :predicate my/feature-lang
      :after (prog-core prog-xref)
@@ -9,6 +12,8 @@
      :init my/lang-elisp-init)
 
     (:name lang-python
+     :description "Python language support."
+     :tags (:lang :python)
      :feature my/feature-lang-python
      :predicate my/feature-lang
      :after (prog-core project-core)
@@ -16,6 +21,8 @@
      :init my/lang-python-init)
 
     (:name lang-go
+     :description "Go language support."
+     :tags (:lang :go)
      :feature my/feature-lang-go
      :predicate my/feature-lang
      :after (prog-core project-core)
@@ -23,6 +30,8 @@
      :init my/lang-go-init)
 
     (:name lang-rust
+     :description "Rust language support."
+     :tags (:lang :rust)
      :feature my/feature-lang-rust
      :predicate my/feature-lang
      :after (prog-core project-core)
@@ -30,6 +39,8 @@
      :init my/lang-rust-init)
 
     (:name lang-tsjs
+     :description "TypeScript/JavaScript language support."
+     :tags (:lang :ts :js)
      :feature my/feature-lang-tsjs
      :predicate my/feature-lang
      :after (prog-core project-core)
@@ -37,6 +48,8 @@
      :init my/lang-tsjs-init)
 
     (:name lang-nix
+     :description "Nix language support."
+     :tags (:lang :nix)
      :feature my/feature-lang-nix
      :predicate my/feature-lang
      :after (prog-core project-core)
@@ -44,6 +57,8 @@
      :init my/lang-nix-init)
 
     (:name lang-web
+     :description "Web development (HTML/CSS) support."
+     :tags (:lang :web)
      :feature my/feature-lang-web
      :predicate my/feature-lang
      :after (prog-core project-core)
@@ -51,6 +66,8 @@
      :init my/lang-web-init)
 
     (:name lang-markdown
+     :description "Markdown editing support."
+     :tags (:lang :markdown)
      :feature my/feature-lang-markdown
      :predicate my/feature-lang
      :after project-core
@@ -58,6 +75,8 @@
      :init my/lang-markdown-init)
 
     (:name lang-org
+     :description "Org mode configuration and enhancements."
+     :tags (:lang :org)
      :feature my/feature-lang-org
      :predicate my/feature-lang
      :after project-core
@@ -65,6 +84,8 @@
      :init my/lang-org-init)
 
     (:name lang-yaml-json-toml
+     :description "YAML, JSON, and TOML data format support."
+     :tags (:lang :data)
      :feature my/feature-lang-data
      :predicate my/feature-lang
      :after (prog-core project-core)

@@ -1,15 +1,17 @@
-;;; manifest-project.el --- Project module manifest -*- lexical-binding: t; -*-
-;;; Commentary:
-;;; Declarative module manifest for project layer.
+;;; manifest-project.el --- Project module manifest  -*- lexical-binding: t; -*-
 ;;; Code:
 
 (defconst my/project-modules
   '((:name project-core
+     :description "Core project detection and management."
+     :tags (:project :core)
      :feature my/feature-project
      :require project-core
      :init my/project-core-init)
 
     (:name project-search
+     :description "Project-wide search (ripgrep, grep)."
+     :tags (:project :search)
      :feature my/feature-project-search
      :predicate my/feature-project
      :after project-core
@@ -17,6 +19,8 @@
      :init my/project-search-init)
 
     (:name project-compile
+     :description "Project build and compilation commands."
+     :tags (:project :build)
      :feature my/feature-project-compile
      :predicate my/feature-project
      :after project-core
@@ -24,6 +28,8 @@
      :init my/project-compile-init)
 
     (:name project-test
+     :description "Project test runner integration."
+     :tags (:project :test)
      :feature my/feature-project-test
      :predicate my/feature-project
      :after project-core
@@ -31,6 +37,8 @@
      :init my/project-test-init)
 
     (:name project-workspace
+     :description "Multi-root workspace support."
+     :tags (:project :workspace)
      :feature my/feature-project-workspace
      :predicate my/feature-project
      :after project-core

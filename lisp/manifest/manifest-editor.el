@@ -1,57 +1,73 @@
-;;; manifest-editor.el --- Editor module manifest -*- lexical-binding: t; -*-
-;;; Commentary:
-;;; Declarative module manifest for editor layer.
+;;; manifest-editor.el --- Editor module manifest  -*- lexical-binding: t; -*-
 ;;; Code:
 
 (defconst my/editor-modules
   '((:name editor-basics
+     :description "Fundamental editing settings (indentation, wrapping, etc.)."
+     :tags (:editor :core)
      :feature my/feature-editor
      :require editor-basics
      :init my/editor-basics-init)
 
     (:name editor-motion
+     :description "Enhanced cursor movement commands."
+     :tags (:editor :motion)
      :feature my/feature-editor
      :after editor-basics
      :require editor-motion
      :init my/editor-motion-init)
 
     (:name editor-selection
+     :description "Improved text selection utilities."
+     :tags (:editor :selection)
      :feature my/feature-editor
      :after editor-basics
      :require editor-selection
      :init my/editor-selection-init)
 
     (:name editor-pairs
+     :description "Automatic insertion of matching pairs (parentheses, quotes)."
+     :tags (:editor :pairs)
      :feature my/feature-editor
      :after editor-basics
      :require editor-pairs
      :init my/editor-pairs-init)
 
     (:name editor-indent
+     :description "Smart indentation behavior."
+     :tags (:editor :indent)
      :feature my/feature-editor
      :after editor-basics
      :require editor-indent
      :init my/editor-indent-init)
 
     (:name editor-format
+     :description "Code formatting integration."
+     :tags (:editor :format)
      :feature my/feature-editor
      :after (editor-basics editor-indent)
      :require editor-format
      :init my/editor-format-init)
 
     (:name editor-whitespace
+     :description "Highlight and clean up whitespace."
+     :tags (:editor :whitespace)
      :feature my/feature-editor
      :after editor-basics
      :require editor-whitespace
      :init my/editor-whitespace-init)
 
     (:name editor-snippets
+     :description "Snippet expansion system."
+     :tags (:editor :snippets)
      :feature my/feature-editor
      :after editor-basics
      :require editor-snippets
      :init my/editor-snippets-init)
 
     (:name editor-folding
+     :description "Code folding / outline navigation."
+     :tags (:editor :folding)
      :feature my/feature-editor
      :after editor-basics
      :require editor-folding
