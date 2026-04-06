@@ -6,7 +6,6 @@
      :description "Startup time measurement and reporting."
      :tags (:ops :startup)
      :feature my/feature-ops-startup
-     :predicate my/feature-ops
      :after prog-core
      :require ops-startup
      :init my/ops-startup-init)
@@ -15,7 +14,6 @@
      :description "Runtime profiler integration."
      :tags (:ops :profiler)
      :feature my/feature-ops-profiler
-     :predicate my/feature-ops
      :require ops-profiler
      :init my/ops-profiler-init)
 
@@ -23,7 +21,6 @@
      :description "System health and configuration status checks."
      :tags (:ops :health)
      :feature my/feature-ops-healthcheck
-     :predicate my/feature-ops
      :require ops-healthcheck
      :init my/ops-healthcheck-init)
 
@@ -31,7 +28,6 @@
      :description "Performance benchmarking tools."
      :tags (:ops :benchmark)
      :feature my/feature-ops-benchmark
-     :predicate my/feature-ops
      :require ops-benchmark
      :init my/ops-benchmark-init)
 
@@ -39,7 +35,6 @@
      :description "Sandboxed evaluation environment."
      :tags (:ops :sandbox)
      :feature my/feature-ops-sandbox
-     :predicate my/feature-ops
      :require ops-sandbox
      :init my/ops-sandbox-init))
   "Declarative operations module specifications.")

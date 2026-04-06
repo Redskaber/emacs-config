@@ -30,7 +30,7 @@
 (defvar my/project-compile-command-provider-functions nil
   "Hook-like list of functions that return a compile command string or nil.
 
-Each function is called with one argument ROOT.")
+  Each function is called with one argument ROOT.")
 
 (defun my/project-compile--root ()
   "Return compile root."
@@ -66,7 +66,7 @@ Each function is called with one argument ROOT.")
 
 (defun my/project-compile (&optional edit)
   "Compile current project.
-With prefix EDIT, prompt for command."
+  With prefix EDIT, prompt for command."
   (interactive "P")
   (let* ((default-directory (my/project-compile--root))
          (compile-command (my/project-compile-default-command))
@@ -85,7 +85,7 @@ With prefix EDIT, prompt for command."
   "Set project-local compile COMMAND for current session."
   (interactive "sSet project compile command: ")
   (setq-local my/project-compile-command command)
-  (my/log "Project compile command set: %s" command))
+  (my/log-info "Project compile command set: %s" command))
 
 (defun my/project-compile-init ()
   "Initialize project compile workflow."
@@ -95,7 +95,7 @@ With prefix EDIT, prompt for command."
                                                     (my/project-compile t)))
   (define-key my/project-mode-map (kbd "C-c p R") #'my/project-recompile)
   (define-key my/project-mode-map (kbd "C-c p =") #'my/project-set-compile-command)
-  (my/log "project-compile initialized."))
+  (my/log-info "project-compile initialized."))
 
 (provide 'project-compile)
 ;;; project-compile.el ends here

@@ -79,7 +79,7 @@ With prefix EDIT, prompt for command."
   "Set project-local test COMMAND for current session."
   (interactive "sSet project test command: ")
   (setq-local my/project-test-command command)
-  (my/log "Project test command set: %s" command))
+  (my/log-info "Project test command set: %s" command))
 
 (defun my/project-test-file ()
   "Run test command for current file if a provider exists, else fallback."
@@ -96,7 +96,7 @@ With prefix EDIT, prompt for command."
                                                     (my/project-test t)))
   (define-key my/project-mode-map (kbd "C-c p v") #'my/project-test-file)
   (define-key my/project-mode-map (kbd "C-c p -") #'my/project-set-test-command)
-  (my/log "project-test initialized."))
+  (my/log-info "project-test initialized."))
 
 (provide 'project-test)
 ;;; project-test.el ends here

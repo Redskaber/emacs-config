@@ -13,7 +13,6 @@
      :description "Tree-sitter integration: grammar auto-install, mode remapping."
      :tags (:prog :treesit)
      :feature my/feature-prog-treesit
-     :predicate my/feature-prog
      :after prog-core
      :require prog-treesit
      :init my/prog-treesit-init)
@@ -22,7 +21,6 @@
      :description "LSP client via eglot or lsp-mode, project-aware server launch."
      :tags (:prog :lsp)
      :feature my/feature-prog-lsp
-     :predicate my/feature-prog
      :after prog-core
      :require prog-lsp
      :init my/prog-lsp-init)
@@ -31,7 +29,6 @@
      :description "Inline diagnostics via flymake / flycheck."
      :tags (:prog :diagnostics)
      :feature my/feature-prog-diagnostics
-     :predicate my/feature-prog
      :after prog-core
      :require prog-diagnostics
      :init my/prog-diagnostics-init)
@@ -40,7 +37,6 @@
      :description "Cross-reference navigation enhancements."
      :tags (:prog :navigation)
      :feature my/feature-prog-xref
-     :predicate my/feature-prog
      :after prog-core
      :require prog-xref
      :init my/prog-xref-init)
@@ -49,7 +45,6 @@
      :description "Debug adapter (dap-mode / realgud) integration."
      :tags (:prog :debug)
      :feature my/feature-prog-debug
-     :predicate my/feature-prog
      :after prog-core
      :require prog-debug
      :init my/prog-debug-init)
@@ -58,7 +53,6 @@
      :description "Build system glue: compilation commands, error parsers."
      :tags (:prog :build)
      :feature my/feature-prog-build
-     :predicate my/feature-prog
      :after prog-core
      :require prog-build
      :init my/prog-build-init)
@@ -67,7 +61,6 @@
      :description "AI coding assistants (copilot, gptel, codeium…)."
      :tags (:prog :ai)
      :feature my/feature-prog-ai
-     :predicate my/feature-prog
      :after (prog-core prog-xref)
      :require prog-ai
      :init my/prog-ai-init

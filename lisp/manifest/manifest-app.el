@@ -6,7 +6,6 @@
      :description "Terminal integration (ansi-term)."
      :tags (:app :terminal)
      :feature my/feature-app-terminal
-     :predicate my/feature-app
      :after (ux-actions project-core)
      :require app-terminal
      :init my/app-terminal-init)
@@ -15,7 +14,6 @@
      :description "Enhanced dired experience."
      :tags (:app :dired)
      :feature my/feature-app-dired
-     :predicate my/feature-app
      :after ux-actions
      :require app-dired
      :init my/app-dired-init)
@@ -24,7 +22,6 @@
      :description "Eshell configuration and enhancements."
      :tags (:app :shell)
      :feature my/feature-app-eshell
-     :predicate my/feature-app
      :after (ux-history project-core)
      :require app-eshell
      :init my/app-eshell-init)
@@ -33,7 +30,6 @@
      :description "Vterm (libvterm) terminal emulator."
      :tags (:app :terminal)
      :feature my/feature-app-vterm
-     :predicate my/feature-app
      :after app-terminal
      :require app-vterm
      :init my/app-vterm-init)
@@ -42,7 +38,6 @@
      :description "Notes management with Org mode."
      :tags (:app :notes :org)
      :feature my/feature-app-notes
-     :predicate my/feature-app
      :after (project-core lang-org)
      :require app-notes
      :init my/app-notes-init)
@@ -51,7 +46,6 @@
      :description "RSS feed reader."
      :tags (:app :rss)
      :feature my/feature-app-rss
-     :predicate my/feature-app
      :after ux-actions
      :require app-rss
      :init my/app-rss-init
@@ -61,7 +55,6 @@
      :description "LLM (Large Language Model) assistant integration."
      :tags (:app :ai)
      :feature my/feature-app-llm
-     :predicate my/feature-app
      :after (ux-actions prog-core)
      :require app-llm
      :init my/app-llm-init

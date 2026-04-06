@@ -13,7 +13,7 @@
      :description "Project-wide search (ripgrep, grep)."
      :tags (:project :search)
      :feature my/feature-project-search
-     :predicate my/feature-project
+     :when my/feature-project
      :after project-core
      :require project-search
      :init my/project-search-init)
@@ -22,7 +22,7 @@
      :description "Project build and compilation commands."
      :tags (:project :build)
      :feature my/feature-project-compile
-     :predicate my/feature-project
+     :when my/feature-project
      :after project-core
      :require project-compile
      :init my/project-compile-init)
@@ -31,7 +31,7 @@
      :description "Project test runner integration."
      :tags (:project :test)
      :feature my/feature-project-test
-     :predicate my/feature-project
+     :when my/feature-project
      :after project-core
      :require project-test
      :init my/project-test-init)
@@ -40,7 +40,7 @@
      :description "Multi-root workspace support."
      :tags (:project :workspace)
      :feature my/feature-project-workspace
-     :predicate my/feature-project
+     :when my/feature-project
      :after project-core
      :require project-workspace
      :init my/project-workspace-init))

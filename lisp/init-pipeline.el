@@ -1,13 +1,10 @@
-;;; init-pipeline.el --- Top-level startup orchestration  -*- lexical-binding: t; -*-
+;;; init-pipeline.el --- Top-level startup orchestration -*- lexical-binding: t; -*-
 ;;; Commentary:
-;;; - Requires runtime-context and runtime-observer (two new modules).
-;;; - Calls my/runtime-context-init and my/runtime-observer-init in kernel stage.
-;;; - Calls my/ctx-set-phase at each phase boundary for observability.
-;;; - Calls my/ctx-declare-capabilities after platform detection so downstream
-;;;   code can read capabilities from context rather than raw variables.
+;;;   1. Requires kernel-logging (replaces kernel-logging as primary log sink).
+;;;   2. Requires runtime-deferred.
+;;;   3. my/runtime-force-reset-state is the canonical force-clear entry.
+;;;   4. Stage sequence unchanged: bootstrap → platform → kernel → stages → post-init.
 ;;;
-;;; The startup sequence remains:
-;;;   bootstrap → platform → kernel → stages → post-init
 ;;; Code:
 
 ;; Bootstrap
@@ -34,17 +31,19 @@
 (require 'kernel-startup)
 (require 'kernel-keymap)
 
-;; Runtime
+;; Runtime (order: types → observer → feature → context → ...)
 (require 'runtime-types)
-(require 'runtime-context)
 (require 'runtime-observer)
 (require 'runtime-feature)
+(require 'runtime-context)
+(require 'runtime-provider)
+(require 'runtime-manifest)
+(require 'runtime-deferred)
 (require 'runtime-stage-state)
 (require 'runtime-module-state)
-(require 'runtime-manifest)
+(require 'runtime-module-runner)
 (require 'runtime-registry)
 (require 'runtime-graph)
-(require 'runtime-module-runner)
 (require 'runtime-stage)
 (require 'runtime-pipeline)
 
@@ -63,21 +62,20 @@
   "Platform: capability detection."
   (my/profile-stage "platform"
     (my/platform-core-init)
-    ;; populate context with resolved capabilities
     (my/ctx-declare-capabilities)
     (my/ctx-set-phase 'platform)))
 
 (defun my/init-kernel-stage ()
   "Kernel: core infrastructure."
   (my/profile-stage "kernel"
-    ;; initialise context and observer bus first
-    (my/runtime-context-init)
-    (my/runtime-observer-init)
-    ;; Then standard kernel modules (order matters)
+    ;; Standard kernel modules
     (my/kernel-paths-init)
     (my/kernel-logging-init)
     (my/kernel-errors-init)
     (my/kernel-require-init)
+    ;; Context + observer must come first
+    (my/runtime-context-init)
+    (my/runtime-observer-init)
     (my/runtime-feature-init)
     (my/kernel-env-init)
     (my/kernel-encoding-init)
@@ -106,8 +104,8 @@
   (my/runtime-reset-state))
 
 (defun my/init-force-rerun ()
-  "Force-clear all sentinels and re-run the complete startup pipeline.
-Useful for development iteration.  May produce duplicate side effects."
+  "Force-clear all state and re-run the complete pipeline.
+Interactive use only.  May produce duplicate side effects."
   (interactive)
   (my/runtime-force-reset-state)
   (my/init-run))

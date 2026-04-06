@@ -61,7 +61,7 @@
   (define-key my/project-mode-map (kbd "C-c p W") #'my/project-workspace-switch)
   (define-key my/project-mode-map (kbd "C-c p ,") #'my/project-workspace-rename-to-project)
   (define-key my/project-mode-map (kbd "C-c p 0") #'my/project-workspace-close)
-  (my/log "project-workspace initialized."))
+  (my/log-info "project-workspace initialized."))
 
 (provide 'project-workspace)
 ;;; project-workspace.el ends here

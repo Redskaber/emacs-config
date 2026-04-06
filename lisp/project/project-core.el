@@ -88,7 +88,7 @@
   (when (boundp 'project--list)
     (setq project--list
           (cl-remove-if-not #'file-directory-p project--list))
-    (my/log "Cleaned stale entries in project list.")))
+    (my/log-info "Cleaned stale entries in project list.")))
 
 (defun my/project-browse-root ()
   "Browse project root in file manager / Dired."
@@ -123,7 +123,7 @@
   "Initialize project core."
   (my/project-register-keybindings)
   (my/project-mode 1)
-  (my/log "project-core initialized."))
+  (my/log-info "project-core initialized."))
 
 (provide 'project-core)
 ;;; project-core.el ends here

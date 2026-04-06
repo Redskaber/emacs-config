@@ -12,7 +12,7 @@
   (condition-case err
       (require feature filename noerror)
     (error
-     (my/log "require failed: %S -> %S" feature err)
+     (my/log-error "require failed: %S -> %S" feature err)
      nil)))
 
 (defun my/require-if (predicate feature &optional filename)

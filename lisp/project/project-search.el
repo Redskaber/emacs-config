@@ -90,7 +90,7 @@
   (define-key my/project-mode-map (kbd "C-c p s") #'my/project-search)
   (define-key my/project-mode-map (kbd "C-c p .") #'my/project-search-symbol-at-point)
   (define-key my/project-mode-map (kbd "C-c p /") #'my/project-search-todo)
-  (my/log "project-search initialized."))
+  (my/log-info "project-search initialized."))
 
 (provide 'project-search)
 ;;; project-search.el ends here

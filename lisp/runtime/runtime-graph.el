@@ -7,7 +7,7 @@
 (require 'runtime-registry)
 
 (defun my/runtime-graph--validate-stage-deps ()
-  "Validate that all stage dependencies refer to declared stages."
+  "Validate all stage deps refer to declared stages."
   (let ((known (my/runtime-stage-names)))
     (dolist (stage known)
       (dolist (dep (my/runtime-stage-after stage))
@@ -15,30 +15,24 @@
           (error "Unknown stage dependency: %S depends on %S" stage dep))))))
 
 (defun my/runtime-graph-stage-plan ()
-  "Return topologically sorted stage plan.
-Signal an error on cycles."
+  "Return topologically sorted stage plan.  Signals error on cycles."
   (my/runtime-graph--validate-stage-deps)
-  (let* ((nodes (my/runtime-stage-names))
+  (let* ((nodes    (my/runtime-stage-names))
          (incoming (make-hash-table :test #'eq))
          (outgoing (make-hash-table :test #'eq))
          (queue nil)
          (result nil))
-    ;; init
     (dolist (n nodes)
       (puthash n 0 incoming)
       (puthash n nil outgoing))
-    ;; build graph
     (dolist (stage nodes)
       (dolist (dep (my/runtime-stage-after stage))
-        ;; dep -> stage
         (puthash stage (1+ (gethash stage incoming 0)) incoming)
         (puthash dep (cons stage (gethash dep outgoing)) outgoing)))
-    ;; seed
     (dolist (n nodes)
       (when (= 0 (gethash n incoming 0))
         (push n queue)))
     (setq queue (nreverse queue))
-    ;; kahn
     (while queue
       (let ((n (pop queue)))
         (push n result)

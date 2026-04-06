@@ -23,7 +23,7 @@
 (defun my/runtime-stage-manifest (stage)
   "Return manifest list for STAGE."
   (let* ((spec (my/runtime-stage-spec stage))
-         (sym (plist-get spec :manifest)))
+         (sym  (plist-get spec :manifest)))
     (unless (and sym (boundp sym))
       (error "Manifest variable not bound for stage %S: %S" stage sym))
     (symbol-value sym)))
