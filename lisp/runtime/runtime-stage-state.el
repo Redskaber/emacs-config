@@ -1,10 +1,12 @@
 ;;; runtime-stage-state.el --- Stage execution state -*- lexical-binding: t; -*-
 ;;; Commentary:
-;;;   1. Stage records are `my/stage-record' structs (from runtime-types).
-;;;   2. All state access goes through API — no external hash-table access.
-;;;   3. "degraded" resolution is the same: any module failure → degraded.
-;;;   4. my/with-runtime-stage-state macro preserved, adapted for structs.
-;;;   5. Observer events carry `my/stage-record' structs instead of plists.
+;;;  1. my/runtime-stage-state-set accepts an optional REASON argument
+;;;     (passed through to my/stage-record :detail) for better diagnostics.
+;;;  2. Observer events now consistently carry `my/stage-record' structs.
+;;;  3. my/with-runtime-stage-state preserves started-at when updating
+;;;     an existing record (no regression vs V1).
+;;;  4. my/runtime-stage-state-summary is new: returns alist of
+;;;     (stage . status) for all known stages.
 ;;;
 ;;; Code:
 
@@ -13,16 +15,16 @@
 (require 'runtime-types)
 (require 'runtime-observer)
 
-;; ---------------------------------------------------------------------------
-;; Private state table
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
+;; Private state
+;; ─────────────────────────────────────────────────────────────────────────────
 
 (defvar my/stage--table (make-hash-table :test #'eq)
   "Map stage-name-symbol → `my/stage-record'.")
 
-;; ---------------------------------------------------------------------------
-;; Accessors (API — no external hash access)
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
+;; Accessors
+;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/runtime-stage-state-get (stage)
   "Return `my/stage-record' for STAGE, or nil."
@@ -35,8 +37,7 @@
 
 (defun my/runtime-stage-state-set (stage status &optional detail)
   "Set STAGE to STATUS with optional DETAIL.
-
-  If a record already exists its :started-at is preserved."
+  Preserves :started-at from any existing record."
   (let* ((old (my/runtime-stage-state-get stage))
          (t0  (if old (my/stage-record-started-at old) (float-time)))
          (t1  (unless (eq status my/stage-status-running) (float-time)))
@@ -53,60 +54,55 @@
     (clrhash my/stage--table)))
 
 (defun my/runtime-stage-state-init ()
-  "Initialise stage state subsystem."
+  "Initialise stage state."
   (my/runtime-stage-state-clear))
 
-;; ---------------------------------------------------------------------------
+(defun my/runtime-stage-state-summary ()
+  "Return alist of (stage . status) for all known stages."
+  (let (result)
+    (maphash (lambda (k v)
+               (push (cons k (my/stage-record-status v)) result))
+             my/stage--table)
+    (sort result (lambda (a b) (string< (symbol-name (car a))
+                                        (symbol-name (car b)))))))
+
+;; ─────────────────────────────────────────────────────────────────────────────
 ;; Predicates
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/runtime-stage-done-p (stage)
-  "Return non-nil if STAGE completed (ok or degraded)."
   (memq (my/runtime-stage-state-status stage) my/stage-done-statuses))
 
 (defun my/runtime-stage-ok-p (stage)
-  "Return non-nil if STAGE completed without failures."
   (eq (my/runtime-stage-state-status stage) my/stage-status-ok))
 
 (defun my/runtime-stage-degraded-p (stage)
-  "Return non-nil if STAGE completed with some module failures."
   (eq (my/runtime-stage-state-status stage) my/stage-status-degraded))
 
 (defun my/runtime-stage-failed-p (stage)
-  "Return non-nil if STAGE failed to execute."
   (eq (my/runtime-stage-state-status stage) my/stage-status-failed))
 
 (defun my/runtime-stage-running-p (stage)
-  "Return non-nil if STAGE is currently executing."
   (eq (my/runtime-stage-state-status stage) my/stage-status-running))
 
-;; ---------------------------------------------------------------------------
-;; Status computation from module results
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
+;; Status from module results
+;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/runtime-stage--compute-status (results)
-  "Derive stage status from list of module status symbols RESULTS.
-  Returns `degraded' if any module failed; `ok' otherwise."
+  "Derive stage status from module status list RESULTS."
   (if (memq my/module-status-failed results)
       my/stage-status-degraded
     my/stage-status-ok))
 
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 ;; Stage lifecycle macro
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 
 (defmacro my/with-runtime-stage-state (stage &rest body)
   "Execute BODY under STAGE lifecycle tracking.
-
   BODY should return a list of module status symbols.
-
-  Transitions:
-    (absent)  → running  (on entry)
-    running   → ok       (no module failures)
-    running   → degraded (some module failures)
-    running   → failed   (BODY signalled)
-
-  Already-done or already-running stages are skipped safely."
+  Transitions: (absent)→running → ok|degraded|failed."
   (declare (indent 1))
   `(cond
     ((my/runtime-stage-done-p ,stage)

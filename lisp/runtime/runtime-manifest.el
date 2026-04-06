@@ -1,51 +1,71 @@
 ;;; runtime-manifest.el --- Manifest spec normalisation -*- lexical-binding: t; -*-
 ;;; Commentary:
-;;;   1. :predicate renamed to :when (environment / runtime condition).
-;;;      Backward-compat: :predicate still accepted during normalization and
-;;;      mapped to :when.  Emits a deprecation warning.
-;;;   2. :description :version :tags preserved from V1.
-;;;   3. Normalizer validates required keys and logs unknown keys at trace level.
-;;;
-;;; Required fields: :name :require :init
-;;; Optional fields: :feature :when (:predicate deprecated) :after :defer
-;;;                  :description :version :tags
+;;;  1. Validation contract: my/runtime-manifest-validate-spec signals an
+;;;     error (not just a warning) for missing required keys.
+;;;  2. :predicate backward-compat alias preserved; warns, then maps to :when.
+;;;  3. Unknown key detection is unchanged (warn at trace level).
+;;;  4. New: my/runtime-manifest-validate can be called on an entire manifest
+;;;     list before execution to fail fast on bad specs.
 ;;;
 ;;; Code:
 
 (require 'kernel-lib)
 (require 'kernel-logging)
 
-;; ---------------------------------------------------------------------------
-;; Normalisation
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
+;; Known keys
+;; ─────────────────────────────────────────────────────────────────────────────
 
 (defconst my/manifest--known-keys
-  '(:name :feature :when :predicate :after :require :init :defer
-    :description :version :tags)
+  '(:name :feature :when :predicate :after :require :init :defer :description :version :tags)
   "All recognised manifest spec keys.")
 
-(defun my/runtime-manifest-normalize-spec (spec)
-  "Normalise manifest SPEC plist and validate required keys.
-  Returns canonical plist with all known keys present (nil for absent).
+(defconst my/manifest--required-keys
+  '(:name :require :init)
+  "Keys that must be present in every manifest spec.")
 
-  :predicate is accepted as a backward-compat alias for :when."
-  (let* ((name        (my/plist-get-required spec :name))
+;; ─────────────────────────────────────────────────────────────────────────────
+;; Validation
+;; ─────────────────────────────────────────────────────────────────────────────
+
+(defun my/runtime-manifest-validate-spec (spec)
+  "Signal an error when SPEC is missing required keys.
+  Returns nil on success (use normalizer to get the canonical form)."
+  (dolist (key my/manifest--required-keys)
+    (unless (plist-get spec key)
+      (error "Manifest spec missing required key %S in spec: %S" key spec)))
+  nil)
+
+(defun my/runtime-manifest-validate (manifest)
+  "Validate a list of manifest specs.  Signals on first invalid spec."
+  (dolist (spec manifest)
+    (my/runtime-manifest-validate-spec spec)))
+
+;; ─────────────────────────────────────────────────────────────────────────────
+;; Normalisation
+;; ─────────────────────────────────────────────────────────────────────────────
+
+(defun my/runtime-manifest-normalize-spec (spec)
+  "Validate and normalise SPEC plist.  Returns canonical plist."
+  ;; Validate first — fail fast
+  (my/runtime-manifest-validate-spec spec)
+
+  (let* ((name        (plist-get spec :name))
          (feature     (plist-get spec :feature))
-         ;; :when wins; :predicate is compat alias
          (when-gate   (or (plist-get spec :when)
                           (when-let ((p (plist-get spec :predicate)))
                             (my/log-warn "manifest"
                               "%s uses :predicate (deprecated); use :when" name)
                             p)))
          (after       (my/listify (plist-get spec :after)))
-         (require-sym (my/plist-get-required spec :require))
-         (init        (my/plist-get-required spec :init))
+         (require-sym (plist-get spec :require))
+         (init        (plist-get spec :init))
          (defer       (plist-get spec :defer))
          (description (plist-get spec :description))
          (version     (plist-get spec :version))
          (tags        (my/listify (plist-get spec :tags))))
 
-    ;; Warn on unknown keys (helps catch typos in manifests)
+    ;; Warn on unknown keys
     (cl-loop for (k _v) on spec by #'cddr
              unless (memq k my/manifest--known-keys)
              do (my/log-warn "manifest" "%s unknown key %S" name k))
@@ -65,9 +85,9 @@
   "Normalise a list of manifest specs."
   (mapcar #'my/runtime-manifest-normalize-spec manifest))
 
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 ;; Metadata accessors
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/manifest-spec-name        (spec) (plist-get spec :name))
 (defun my/manifest-spec-description (spec) (plist-get spec :description))

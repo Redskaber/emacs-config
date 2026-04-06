@@ -1,6 +1,7 @@
 ;;; runtime-registry.el --- Runtime access to stage registry -*- lexical-binding: t; -*-
 ;;; Commentary:
-;;; Query helpers over declarative stage registry.
+;;;  No semantic changes.  Included for completeness and to confirm
+;;;  the file is part of the V2 distribution.
 ;;; Code:
 
 (require 'seq)

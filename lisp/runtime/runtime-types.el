@@ -1,114 +1,121 @@
-;;; runtime-types.el --- Canonical runtime type contracts  -*- lexical-binding: t; -*-
+;;; runtime-types.el --- Canonical runtime type contracts -*- lexical-binding: t; -*-
 ;;; Commentary:
-;;;
-;;;   1. Status symbols promoted to defconst groups with doc strings.
-;;;   2. cl-defstruct for ModuleRecord / StageRecord / DeferredJob.
-;;;      - Struct slots are typed and documented; no more free-form plists as records.
-;;;      - Accessor names are explicit and grep-able.
-;;;   3. Reason constants renamed for clarity (no collision with status names).
-;;;   4. Constructor helpers validate required fields at creation time.
-;;;
-;;; Public API
-;;; ----------
-;;;   Constructors : my/make-module-record  my/make-stage-record  my/make-deferred-job
-;;;   Predicates   : my/module-record-p     my/stage-record-p     my/deferred-job-p
-;;;   Accessors    : my/module-record-{name,status,reason,after,defer,started-at,ended-at}
-;;;                  my/stage-record-{name,status,started-at,ended-at,detail}
-;;;                  my/deferred-job-{name,strategy,scheduled-at}
+;;;  1. Module status enumeration unified and expanded:
+;;;       planned → loading → loaded → deferred → running → ok / failed / skipped / cancelled
+;;;     Scheduler-internal states (scheduled/fired) removed from module domain;
+;;;     they live only inside runtime-deferred as deferred-obj.state.
+;;;  2. :supersedes slot added to my/module-record.
+;;;     When a deferred module transitions to a final state the new record
+;;;     carries :supersedes (the previous record) so both the latest-table
+;;;     (decision) and the append-log (audit) tell the full transition story.
+;;;  3. DeferredJob gains :fired-at for latency accounting.
+;;;  4. Constructor helpers validate :status membership at creation time.
 ;;;
 ;;; Code:
 
 (require 'cl-lib)
 
-;; ---------------------------------------------------------------------------
-;; Module status
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
+;; Module status — single authoritative enumeration
+;; ─────────────────────────────────────────────────────────────────────────────
 
-(defconst my/module-status-pending   'pending
-  "Module registered but not yet evaluated.")
-(defconst my/module-status-ok        'ok
-  "Module initialised successfully.")
+(defconst my/module-status-planned   'planned
+  "Module in manifest but not yet evaluated by runner.")
+(defconst my/module-status-loading   'loading
+  "Runner issued (require …); load in progress.")
+(defconst my/module-status-loaded    'loaded
+  "Feature file loaded; init not yet called.")
 (defconst my/module-status-deferred  'deferred
-  "Module scheduled for deferred initialisation.")
+  "Init scheduled; will run later.")
+(defconst my/module-status-running   'running
+  "Init function currently executing.")
+(defconst my/module-status-ok        'ok
+  "Init completed successfully.")
 (defconst my/module-status-failed    'failed
-  "Module initialisation failed.")
+  "Init (or load) raised an error.")
 (defconst my/module-status-skipped   'skipped
-  "Module was skipped (feature / predicate / dependency gate).")
+  "Skipped by feature/when/dependency gate.")
+(defconst my/module-status-cancelled 'cancelled
+  "A previously deferred init was cancelled.")
 
 (defconst my/module-statuses
-  (list my/module-status-pending
-        my/module-status-ok
+  (list my/module-status-planned
+        my/module-status-loading
+        my/module-status-loaded
         my/module-status-deferred
+        my/module-status-running
+        my/module-status-ok
         my/module-status-failed
-        my/module-status-skipped)
-  "All legal module status symbols.")
+        my/module-status-skipped
+        my/module-status-cancelled)
+  "All legal module status symbols (ordered by lifecycle).")
 
-;; Statuses that satisfy an :after dependency
+;; Statuses that count as «satisfied» for :after dependency resolution.
+;; Deferred counts: the feature file is loaded and init will run.
 (defconst my/module-satisfied-statuses
   (list my/module-status-ok my/module-status-deferred)
-  "Module statuses that count as satisfied for dependency resolution.")
+  "Module statuses that satisfy an :after dependency.")
 
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 ;; Stage status
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 
-(defconst my/stage-status-pending   'pending   "Stage not yet started.")
-(defconst my/stage-status-running   'running   "Stage currently executing.")
-(defconst my/stage-status-ok        'ok        "Stage completed; no module failures.")
-(defconst my/stage-status-degraded  'degraded  "Stage completed; some modules failed.")
-(defconst my/stage-status-failed    'failed    "Stage could not complete.")
-(defconst my/stage-status-skipped   'skipped   "Stage skipped by gate or dependency.")
+(defconst my/stage-status-pending   'pending)
+(defconst my/stage-status-running   'running)
+(defconst my/stage-status-ok        'ok)
+(defconst my/stage-status-degraded  'degraded)
+(defconst my/stage-status-failed    'failed)
+(defconst my/stage-status-skipped   'skipped)
 
 (defconst my/stage-done-statuses
   (list my/stage-status-ok my/stage-status-degraded)
-  "Stage statuses that count as done for downstream dependency resolution.")
+  "Stage statuses considered done for dependency resolution.")
 
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 ;; Skip / fail reason keywords
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 
-(defconst my/reason-feature-disabled  :feature-disabled
-  "Module/stage skipped: feature flag was nil.")
-(defconst my/reason-predicate-failed  :predicate-failed
-  "Module skipped: :predicate evaluated nil.")
-(defconst my/reason-dependency-failed :dependency-failed
-  "Module/stage skipped: :after dependency not satisfied.")
-(defconst my/reason-require-failed    :require-failed
-  "Module failed: (require :require) signalled an error.")
-(defconst my/reason-init-failed       :init-failed
-  "Module failed: :init function signalled an error.")
-(defconst my/reason-already-done      :already-done
-  "Stage skipped: it already ran in this session.")
-(defconst my/reason-idempotent-skip   :idempotent-skip
-  "Module skipped: a record already exists (idempotency guard).")
+(defconst my/reason-feature-disabled  :feature-disabled)
+(defconst my/reason-predicate-failed  :predicate-failed)
+(defconst my/reason-dependency-failed :dependency-failed)
+(defconst my/reason-require-failed    :require-failed)
+(defconst my/reason-init-failed       :init-failed)
+(defconst my/reason-already-done      :already-done)
+(defconst my/reason-idempotent-skip   :idempotent-skip)
+(defconst my/reason-cancelled         :cancelled)
 
-;; ---------------------------------------------------------------------------
-;; Struct: ModuleRecord
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
+;; Struct: ModuleRecord  (adds :supersedes)
+;; ─────────────────────────────────────────────────────────────────────────────
 
 (cl-defstruct (my/module-record
                (:constructor my/module-record--make)
                (:copier nil))
-  "Immutable execution record for a single manifest module."
+  "Immutable execution record for a single manifest module.
+
+  When a deferred module transitions to its final state a new record
+  is created with :supersedes pointing at the previous record.  The
+  append-log therefore retains the full transition history."
   (name        nil :read-only t :documentation "Module name symbol.")
   (status      nil :read-only t :documentation "One of `my/module-statuses'.")
   (reason      nil :read-only t :documentation "Reason keyword or nil.")
   (after       nil :read-only t :documentation ":after dependency list.")
   (defer       nil :read-only t :documentation "Defer strategy spec or nil.")
-  (started-at  nil :read-only t :documentation "float-time when init started.")
-  (ended-at    nil :read-only t :documentation "float-time when init ended."))
+  (started-at  nil :read-only t :documentation "float-time when init started, or nil.")
+  (ended-at    nil :read-only t :documentation "float-time when init ended, or nil.")
+  (supersedes  nil :read-only t :documentation "Previous my/module-record this replaces, or nil."))
 
 (defun my/make-module-record (&rest args)
   "Create a `my/module-record' from keyword ARGS.
 
 Required: :name :status
-Optional: :reason :after :defer :started-at :ended-at
+Optional: :reason :after :defer :started-at :ended-at :supersedes
 
-Signals an error when required keys are missing or status is unknown."
+Signals `error' on missing required keys or unknown :status."
   (let ((name   (or (plist-get args :name)
-                    (error "my/make-module-record: :name is required")))
+                    (error "my/make-module-record: :name required")))
         (status (or (plist-get args :status)
-                    (error "my/make-module-record: :status is required"))))
+                    (error "my/make-module-record: :status required"))))
     (unless (memq status my/module-statuses)
       (error "my/make-module-record: unknown status %S" status))
     (my/module-record--make
@@ -118,47 +125,46 @@ Signals an error when required keys are missing or status is unknown."
      :after      (plist-get args :after)
      :defer      (plist-get args :defer)
      :started-at (plist-get args :started-at)
-     :ended-at   (plist-get args :ended-at))))
+     :ended-at   (plist-get args :ended-at)
+     :supersedes (plist-get args :supersedes))))
 
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 ;; Struct: StageRecord
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 
 (cl-defstruct (my/stage-record
                (:constructor my/stage-record--make)
                (:copier nil))
   "Execution record for a startup stage."
-  (name       nil :read-only t :documentation "Stage name symbol.")
-  (status     nil :read-only t :documentation "One of stage status constants.")
-  (started-at nil :read-only t :documentation "float-time when stage started.")
-  (ended-at   nil :read-only t :documentation "float-time when stage ended.")
-  (detail     nil :read-only t :documentation "Extra context (error, results list …)."))
+  (name       nil :read-only t)
+  (status     nil :read-only t)
+  (started-at nil :read-only t)
+  (ended-at   nil :read-only t)
+  (detail     nil :read-only t :documentation "Error object or results list."))
 
 (defun my/make-stage-record (&rest args)
-  "Create a `my/stage-record' from keyword ARGS.
-
-  Required: :name :status
-  Optional: :started-at :ended-at :detail"
+  "Create a `my/stage-record'.  Required: :name :status."
   (my/stage-record--make
    :name       (or (plist-get args :name)
-                   (error "my/make-stage-record: :name is required"))
+                   (error "my/make-stage-record: :name required"))
    :status     (or (plist-get args :status)
-                   (error "my/make-stage-record: :status is required"))
+                   (error "my/make-stage-record: :status required"))
    :started-at (plist-get args :started-at)
    :ended-at   (plist-get args :ended-at)
    :detail     (plist-get args :detail)))
 
-;; ---------------------------------------------------------------------------
-;; Struct: DeferredJob
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
+;; Struct: DeferredJob  (adds :fired-at)
+;; ─────────────────────────────────────────────────────────────────────────────
 
 (cl-defstruct (my/deferred-job
                (:constructor my/deferred-job--make)
                (:copier nil))
   "Record of a scheduled deferred-init job."
-  (name         nil :read-only t :documentation "Module name symbol.")
-  (strategy     nil :read-only t :documentation "Defer strategy plist.")
-  (scheduled-at nil :read-only t :documentation "float-time when scheduled."))
+  (name         nil :read-only t)
+  (strategy     nil :read-only t)
+  (scheduled-at nil :read-only t)
+  (fired-at     nil               :documentation "float-time when the thunk actually ran."))
 
 (defun my/make-deferred-job (name strategy)
   "Create a `my/deferred-job' for NAME with STRATEGY."
@@ -166,14 +172,6 @@ Signals an error when required keys are missing or status is unknown."
    :name         (or name (error "my/make-deferred-job: name required"))
    :strategy     strategy
    :scheduled-at (float-time)))
-
-;; ---------------------------------------------------------------------------
-;; Init (no-op: constants and structs are defined at load time)
-;; ---------------------------------------------------------------------------
-
-(defun my/runtime-types-init ()
-  "No-op; types are constants/structs loaded at require time."
-  t)
 
 (provide 'runtime-types)
 ;;; runtime-types.el ends here

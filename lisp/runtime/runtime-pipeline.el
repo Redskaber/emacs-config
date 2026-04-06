@@ -1,9 +1,11 @@
 ;;; runtime-pipeline.el --- Runtime pipeline orchestration -*- lexical-binding: t; -*-
 ;;; Commentary:
-;;;   1. my/runtime-force-reset-state now calls my/deferred-reset (safe cancel).
-;;;   2. Imports updated for new modules (kernel-logging, runtime-deferred).
-;;;   3. my/runtime-final-report logs via kernel-logging (not bare message).
-;;;   4. Otherwise unchanged: bootstrap → platform → kernel → stages → post-init.
+;;;  1. Requires runtime-lifecycle and runtime-doctor.
+;;;  2. my/runtime-reset-state calls my/lifecycle-reset.
+;;;  3. my/runtime-force-reset-state additionally calls my/lifecycle-reset.
+;;;  4. my/runtime-final-report calls my/doctor-module-report and
+;;;     optionally my/doctor-print-slow-modules.
+;;;  5. Stage sequence unchanged: bootstrap → platform → kernel → stages → post-init.
 ;;;
 ;;; Code:
 
@@ -13,59 +15,62 @@
 (require 'runtime-context)
 (require 'runtime-feature)
 (require 'runtime-observer)
+(require 'runtime-lifecycle)
 (require 'runtime-deferred)
 (require 'runtime-graph)
 (require 'runtime-stage)
 (require 'runtime-stage-state)
 (require 'runtime-module-state)
+(require 'runtime-doctor)
 
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 ;; State reset
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/runtime-reset-state ()
-  "Reset module execution records (safe for session re-entry).
-  Does NOT clear stage sentinels — prevents duplicate hook registration."
-  (my/runtime-module-state-reset))
+  "Reset module/lifecycle records (safe for session re-entry).
+  Does NOT clear stage sentinels."
+  (my/runtime-module-state-reset)
+  (my/lifecycle-reset))
 
 (defun my/runtime-force-reset-state ()
   "Force-clear ALL runtime state including stage sentinels and deferred jobs.
-
-  Interactive use only.  May produce duplicate hook/timer side effects
-  on re-run.  Deferred jobs are cancelled before clearing."
+  Interactive use only."
   (interactive)
   (my/deferred-reset)
   (my/runtime-module-state-reset)
+  (my/lifecycle-reset)
   (my/runtime-stage-state-clear))
 
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 ;; Stage plan
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/runtime-plan ()
-  "Return topologically sorted stage execution plan."
   (my/runtime-graph-stage-plan))
 
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 ;; Stage runner
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/runtime-run-all-stages ()
-  "Run all declared stages in dependency order."
   (my/ctx-set-phase 'stages)
   (dolist (stage (my/runtime-plan))
     (my/profile-stage (symbol-name stage)
       (my/runtime-stage-run stage)
       (my/ctx-record-health stage (my/runtime-stage-state-status stage)))))
 
-;; ---------------------------------------------------------------------------
-;; Final report
-;; ---------------------------------------------------------------------------
+;; ─────────────────────────────────────────────────────────────────────────────
+;; Final report  (includes doctor)
+;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/runtime-final-report ()
-  "Emit execution summary."
+  "Emit execution summary including doctor report."
   (my/runtime-module-report)
   (my/runtime-module-deferred-report)
+  ;; V2: emit module-level report and slow-module analysis
+  (my/doctor-module-report)
+  (my/doctor-print-slow-modules 5)
   (my/observer-emit my/event-init-complete
                     (list :elapsed (float-time
                                     (time-subtract (current-time)

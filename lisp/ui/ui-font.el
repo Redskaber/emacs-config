@@ -1,5 +1,6 @@
 ;;; ui-font.el --- Font policy for GUI sessions -*- lexical-binding: t; -*-
 
+(require 'kernel-logging)
 (require 'platform-core)
 
 (defgroup my/ui-font nil

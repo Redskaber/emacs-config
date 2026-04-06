@@ -1,5 +1,7 @@
 ;;; runtime-stage.el --- Stage executor -*- lexical-binding: t; -*-
 ;;; Commentary:
+;;;  No semantic changes.  Import list updated; my/runtime-stage-run
+;;;  is structurally identical to V1.  Included for completeness.
 ;;; Code:
 
 (require 'cl-lib)
@@ -21,12 +23,14 @@
         (deps-ok-p (my/runtime-stage-deps-satisfied-p stage)))
     (cond
      ((not enabled-p)
-      (my/runtime-stage-state-set stage my/stage-status-skipped)
+      (my/runtime-stage-state-set stage my/stage-status-skipped
+                                  :feature-disabled)
       (my/log-debug "stage" "skip(feature): %s" stage)
       my/stage-status-skipped)
 
      ((not deps-ok-p)
-      (my/runtime-stage-state-set stage my/stage-status-skipped)
+      (my/runtime-stage-state-set stage my/stage-status-skipped
+                                  :dependency-failed)
       (my/log-debug "stage" "skip(dep): %s after=%S"
                     stage (my/runtime-stage-after stage))
       my/stage-status-skipped)
