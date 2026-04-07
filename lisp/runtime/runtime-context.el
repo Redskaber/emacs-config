@@ -1,22 +1,16 @@
 ;;; runtime-context.el --- Runtime context -*- lexical-binding: t; -*-
 ;;; Commentary:
-;;;  Three distinct namespaces are enforced via key prefix convention:
+;;;     - Canonical alias map: legacy keys canonicalized on read/write
+;;;       No more dual-write / state-drift for :phase / :health-log etc.
+;;;     - Once-only legacy warnings per key
+;;;     - my/ctx-get auto-dispatches :view/* to my/ctx-get-view
+;;;     - my/ctx-defslot supports :view/* namespace
 ;;;
-;;;    :fact/*   — immutable system facts (set once at capability detection).
-;;;                Reading a :fact/* key after it's set is always safe.
-;;;                Attempting to overwrite a :fact/* key logs a warning.
-;;;
-;;;    :state/*  — mutable runtime state (phase, health-log, etc.).
-;;;                Normal read/write; type-validated against schema.
-;;;
-;;;    :view/*   — derived / computed views (never stored; always re-computed).
-;;;                my/ctx-view defines a named thunk; my/ctx-get-view evaluates it.
-;;;
-;;;  Legacy keys without a namespace prefix are still accepted for backward
-;;;  compatibility but log a deprecation warning on first access.
-;;;
-;;;  Schema, phase management, capability helpers, and health log are preserved
-;;;  from V1 with namespace-aware updates.
+;;; Three namespaces:
+;;;   :fact/*   immutable after capability detection
+;;;   :state/*  mutable runtime state
+;;;   :view/*   derived (computed on demand, never stored)
+;;;   legacy    canonicalized to :fact/* or :state/* transparently
 ;;;
 ;;; Code:
 
@@ -24,12 +18,33 @@
 (require 'kernel-logging)
 
 ;; ─────────────────────────────────────────────────────────────────────────────
+;; Canonical alias map
+;; ─────────────────────────────────────────────────────────────────────────────
+
+(defconst my/ctx--aliases
+  '((:phase       . :state/phase)
+    (:health-log  . :state/health-log)
+    (:gui         . :fact/gui)
+    (:tty         . :fact/tty)
+    (:os-linux    . :fact/os-linux)
+    (:os-macos    . :fact/os-macos)
+    (:os-windows  . :fact/os-windows)
+    (:native-comp . :fact/native-comp)
+    (:treesit     . :fact/treesit)
+    (:wayland     . :fact/wayland))
+  "Alist mapping legacy keyword → canonical :fact/* or :state/* key.
+  Bottom layer stores only canonical keys; legacy keys are transparent aliases.")
+
+(defun my/ctx--canonicalize (key)
+  "Return canonical key for KEY, resolving legacy aliases."
+  (or (cdr (assq key my/ctx--aliases)) key))
+
+;; ─────────────────────────────────────────────────────────────────────────────
 ;; Namespace helpers
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/ctx--key-namespace (key)
-  "Return namespace symbol of KEY: fact | state | legacy.
-  KEY is a keyword symbol like :fact/os-linux or :phase."
+  "Return namespace symbol: fact | state | view | legacy."
   (let ((name (symbol-name key)))
     (cond
      ((string-prefix-p ":fact/"  name) 'fact)
@@ -38,15 +53,30 @@
      (t                                 'legacy))))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
-;; Schema definition
+;; Once-only legacy warning tables
 ;; ─────────────────────────────────────────────────────────────────────────────
 
-(defvar my/ctx--schema (make-hash-table :test #'eq)
-  "Map context key → plist (:type TYPE :doc STRING :required BOOL :ns SYMBOL).")
+(defvar my/ctx--legacy-read-warned  (make-hash-table :test #'eq))
+(defvar my/ctx--legacy-write-warned (make-hash-table :test #'eq))
+
+(defun my/ctx--warn-legacy-read (key canonical)
+  (unless (gethash key my/ctx--legacy-read-warned)
+    (puthash key t my/ctx--legacy-read-warned)
+    (my/log-debug "ctx" "legacy key read: %s → %s (first-time warning)" key canonical)))
+
+(defun my/ctx--warn-legacy-write (key canonical)
+  (unless (gethash key my/ctx--legacy-write-warned)
+    (puthash key t my/ctx--legacy-write-warned)
+    (my/log-debug "ctx" "legacy key write: %s → %s (first-time warning)" key canonical)))
+
+;; ─────────────────────────────────────────────────────────────────────────────
+;; Schema
+;; ─────────────────────────────────────────────────────────────────────────────
+
+(defvar my/ctx--schema (make-hash-table :test #'eq))
 
 (defmacro my/ctx-defslot (key type doc &rest keys)
-  "Declare context slot KEY with TYPE and DOC.
-  Optional: :required BOOL"
+  "Declare context slot KEY with TYPE, DOC, and optional :required."
   (declare (indent 2))
   `(puthash ,key
             (list :type     ',type
@@ -55,46 +85,49 @@
                   :ns       ',(let ((name (symbol-name key)))
                                 (cond ((string-prefix-p ":fact/"  name) 'fact)
                                       ((string-prefix-p ":state/" name) 'state)
+                                      ((string-prefix-p ":view/"  name) 'view)
                                       (t                                 'legacy))))
             my/ctx--schema))
 
-;; ── Fact slots (immutable after capability detection) ─────────────────────────
-(my/ctx-defslot :fact/gui         boolean "Non-nil in a GUI frame.")
-(my/ctx-defslot :fact/tty         boolean "Non-nil in a TTY.")
-(my/ctx-defslot :fact/os-linux    boolean "Non-nil on GNU/Linux.")
-(my/ctx-defslot :fact/os-macos    boolean "Non-nil on macOS.")
-(my/ctx-defslot :fact/os-windows  boolean "Non-nil on Windows.")
-(my/ctx-defslot :fact/native-comp boolean "Non-nil when native-comp is available.")
-(my/ctx-defslot :fact/treesit     boolean "Non-nil when tree-sitter is available.")
-(my/ctx-defslot :fact/wayland     boolean "Non-nil on a Wayland session.")
-(my/ctx-defslot :fact/emacs-version string "Emacs version string.")
+;; Fact slots
+(my/ctx-defslot :fact/gui           boolean "Non-nil in a GUI frame.")
+(my/ctx-defslot :fact/tty           boolean "Non-nil in a TTY.")
+(my/ctx-defslot :fact/os-linux      boolean "Non-nil on GNU/Linux.")
+(my/ctx-defslot :fact/os-macos      boolean "Non-nil on macOS.")
+(my/ctx-defslot :fact/os-windows    boolean "Non-nil on Windows.")
+(my/ctx-defslot :fact/native-comp   boolean "Non-nil when native-comp available.")
+(my/ctx-defslot :fact/treesit       boolean "Non-nil when tree-sitter available.")
+(my/ctx-defslot :fact/wayland       boolean "Non-nil on Wayland.")
+(my/ctx-defslot :fact/emacs-version string  "Emacs version string.")
 
-;; ── State slots (mutable runtime state) ───────────────────────────────────────
+;; State slots
 (my/ctx-defslot :state/phase      symbol
-  "Current startup phase (bootstrap/platform/kernel/stages/post-init/ready)."
+  "Current startup phase."
   :required t)
 (my/ctx-defslot :state/health-log list
   "Alist of (stage . status) health records.")
 
-;; ── Legacy slots (backward compat; will warn on access) ────────────────────
-;; Keep the V1 keyword aliases so existing callers don't break immediately.
-(my/ctx-defslot :phase            symbol "Legacy alias for :state/phase.")
-(my/ctx-defslot :gui              boolean "Legacy alias for :fact/gui.")
-(my/ctx-defslot :tty              boolean "Legacy alias for :fact/tty.")
-(my/ctx-defslot :os-linux         boolean "Legacy alias for :fact/os-linux.")
-(my/ctx-defslot :os-macos         boolean "Legacy alias for :fact/os-macos.")
-(my/ctx-defslot :os-windows       boolean "Legacy alias for :fact/os-windows.")
-(my/ctx-defslot :native-comp      boolean "Legacy alias for :fact/native-comp.")
-(my/ctx-defslot :treesit          boolean "Legacy alias for :fact/treesit.")
-(my/ctx-defslot :wayland          boolean "Legacy alias for :fact/wayland.")
-(my/ctx-defslot :health-log       list    "Legacy alias for :state/health-log.")
+;; View slots  (:view/* supported in schema)
+(my/ctx-defslot :view/os-name      any "Current OS as friendly string (computed).")
+(my/ctx-defslot :view/display-type any "gui or tty string (computed).")
+
+;; Legacy slots (no :required — they are pure aliases)
+(my/ctx-defslot :phase        symbol "Legacy alias → :state/phase.")
+(my/ctx-defslot :health-log   list   "Legacy alias → :state/health-log.")
+(my/ctx-defslot :gui          boolean "Legacy alias → :fact/gui.")
+(my/ctx-defslot :tty          boolean "Legacy alias → :fact/tty.")
+(my/ctx-defslot :os-linux     boolean "Legacy alias → :fact/os-linux.")
+(my/ctx-defslot :os-macos     boolean "Legacy alias → :fact/os-macos.")
+(my/ctx-defslot :os-windows   boolean "Legacy alias → :fact/os-windows.")
+(my/ctx-defslot :native-comp  boolean "Legacy alias → :fact/native-comp.")
+(my/ctx-defslot :treesit      boolean "Legacy alias → :fact/treesit.")
+(my/ctx-defslot :wayland      boolean "Legacy alias → :fact/wayland.")
 
 ;; ─────────────────────────────────────────────────────────────────────────────
 ;; Type predicate
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/ctx--type-ok-p (type value)
-  "Return non-nil when VALUE is compatible with declared TYPE."
   (pcase type
     ('boolean (or (null value) (eq value t) (booleanp value)))
     ('symbol  (symbolp value))
@@ -107,73 +140,90 @@
     (_        t)))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
-;; Runtime context tables
+;; Runtime tables
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defvar my/runtime-context (make-hash-table :test #'eq)
-  "Centralised runtime context table.")
+  "Centralised runtime context table.  Stores only canonical keys.")
 
-;; Track which :fact/* keys have been set (immutability guard)
 (defvar my/ctx--facts-set (make-hash-table :test #'eq)
-  "Set of :fact/* keys that have been written at least once.")
+  "Set of :fact/* keys that have been written at least once (immutability guard).")
 
 ;; ─────────────────────────────────────────────────────────────────────────────
 ;; Accessors
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/ctx-get (key &optional default)
-  "Return KEY from context, or DEFAULT.
-  Legacy keys emit a deprecation warning on first read."
-  (when (eq (my/ctx--key-namespace key) 'legacy)
-    (my/log-debug "ctx" "legacy key access: %s (prefer :fact/* or :state/*)" key))
-  (let ((v (gethash key my/runtime-context :__missing__)))
-    (if (eq v :__missing__) default v)))
+  "Return KEY from context (or DEFAULT).
+
+  :view/* keys are auto-dispatched to my/ctx-get-view.
+  Legacy keys are canonicalized transparently.
+  First-use legacy warning fires once per key."
+  (let ((ns (my/ctx--key-namespace key)))
+    (cond
+     ;; view/* — compute on demand
+     ((eq ns 'view)
+      (my/ctx-get-view key))
+     ;; legacy — canonicalize + once-only warn
+     ((eq ns 'legacy)
+      (let ((canonical (my/ctx--canonicalize key)))
+        (my/ctx--warn-legacy-read key canonical)
+        (let ((v (gethash canonical my/runtime-context :__missing__)))
+          (if (eq v :__missing__) default v))))
+     ;; fact or state — direct lookup
+     (t
+      (let ((v (gethash key my/runtime-context :__missing__)))
+        (if (eq v :__missing__) default v))))))
 
 (defun my/ctx-set (key value)
   "Set KEY to VALUE.
-  :fact/* keys are write-once; subsequent writes are warned and ignored.
-  Type is validated against schema (warn only, non-fatal)."
+  :view/* keys signal an error — views are computed, never stored.
+  Legacy keys canonicalized; original key is NOT stored (no dual-write).
+  :fact/* keys are write-once.
+  Type is validated (warn, non-fatal)."
   (let ((ns (my/ctx--key-namespace key)))
-    ;; Immutability guard for facts
-    (when (and (eq ns 'fact) (gethash key my/ctx--facts-set))
-      (my/log-warn "ctx" "attempt to overwrite immutable fact %s (ignored)" key)
-      (cl-return-from my/ctx-set value))
-    ;; Legacy key warning
-    (when (eq ns 'legacy)
-      (my/log-debug "ctx" "legacy key write: %s (prefer :fact/* or :state/*)" key))
-    ;; Type check
-    (let ((slot (gethash key my/ctx--schema)))
-      (when (and slot
-                 (not (my/ctx--type-ok-p (plist-get slot :type) value)))
-        (my/log-warn "ctx" "type mismatch for %s: expected %s got %S"
-                     key (plist-get slot :type) value)))
-    ;; Store
-    (puthash key value my/runtime-context)
-    (when (eq ns 'fact)
-      (puthash key t my/ctx--facts-set))
-    value))
+    (when (eq ns 'view)
+      (error "ctx: cannot set a :view/* key (%S); views are computed" key))
+    (let* ((canonical (if (eq ns 'legacy)
+                          (progn (my/ctx--warn-legacy-write key (my/ctx--canonicalize key))
+                                 (my/ctx--canonicalize key))
+                        key))
+           (cns (my/ctx--key-namespace canonical)))
+      ;; Immutability guard for facts
+      (when (and (eq cns 'fact) (gethash canonical my/ctx--facts-set))
+        (my/log-warn "ctx" "attempt to overwrite immutable fact %s (ignored)" canonical)
+        (cl-return-from my/ctx-set value))
+      ;; Type check
+      (let ((slot (gethash canonical my/ctx--schema)))
+        (when (and slot (not (my/ctx--type-ok-p (plist-get slot :type) value)))
+          (my/log-warn "ctx" "type mismatch for %s: expected %s got %S"
+                       canonical (plist-get slot :type) value)))
+      ;; Store under canonical key only
+      (puthash canonical value my/runtime-context)
+      (when (eq cns 'fact)
+        (puthash canonical t my/ctx--facts-set))
+      value)))
 
 (defun my/ctx-update (key fn &optional default)
   "Apply FN to current value of KEY (or DEFAULT) and store result."
   (my/ctx-set key (funcall fn (my/ctx-get key default))))
 
 (defun my/ctx-snapshot ()
-  "Return sorted alist snapshot of the context."
+  "Return sorted alist snapshot of the context (canonical keys only)."
   (let (pairs)
     (maphash (lambda (k v) (push (cons k v) pairs)) my/runtime-context)
     (sort pairs (lambda (a b)
                   (string< (symbol-name (car a)) (symbol-name (car b)))))))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
-;; View layer  (derived / computed — never stored)
+;; View layer
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defvar my/ctx--views (make-hash-table :test #'eq)
-  "Map :view/* key → thunk (no args) that computes the derived value.")
+  "Map :view/* key → thunk (no args).")
 
 (defmacro my/ctx-defview (key doc &rest body)
-  "Define a derived context view KEY computed by BODY.
-  BODY is evaluated fresh on each call to my/ctx-get-view."
+  "Define derived context view KEY computed by BODY."
   (declare (indent 2))
   `(puthash ,key (lambda () ,@body) my/ctx--views))
 
@@ -184,7 +234,6 @@
         (funcall thunk)
       (error "No view defined for %S" key))))
 
-;; Built-in views
 (my/ctx-defview :view/os-name "Current OS as a friendly string."
   (cond ((my/ctx-get :fact/os-macos)   "macOS")
         ((my/ctx-get :fact/os-linux)   "Linux")
@@ -199,14 +248,16 @@
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/ctx-validate-invariants ()
-  "Check that :required slots are non-nil.  Returns t on success."
+  "Check required slots.  Returns t on success."
   (let ((ok t))
     (maphash (lambda (key slot)
                (when (plist-get slot :required)
-                 (let ((v (my/ctx-get key :__unset__)))
-                   (when (or (eq v :__unset__) (null v))
-                     (my/log-error "ctx" "required slot %s is unset" key)
-                     (setq ok nil)))))
+                 ;; Only validate canonical keys (skip legacy aliases)
+                 (when (memq (plist-get slot :ns) '(fact state))
+                   (let ((v (gethash key my/runtime-context :__unset__)))
+                     (when (or (eq v :__unset__) (null v))
+                       (my/log-error "ctx" "required slot %s is unset" key)
+                       (setq ok nil))))))
              my/ctx--schema)
     ok))
 
@@ -222,37 +273,31 @@
                    (string< (symbol-name (car a)) (symbol-name (car b)))))))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
-;; Phase management  (uses :state/phase; :phase is legacy alias)
+;; Phase management
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defconst my/ctx-phases
-  '(bootstrap platform kernel stages post-init ready)
-  "Ordered startup phases.")
+  '(bootstrap platform kernel stages post-init ready))
 
 (defun my/ctx-phase ()
   "Return current startup phase."
-  (or (my/ctx-get :state/phase)
-      (my/ctx-get :phase 'bootstrap)))
+  (or (gethash :state/phase my/runtime-context) 'bootstrap))
 
 (defun my/ctx-set-phase (phase)
   "Advance startup phase and log the transition."
   (my/log-info "ctx" "phase: %s → %s" (my/ctx-phase) phase)
-  (my/ctx-set :state/phase phase)
-  ;; Keep legacy alias in sync
-  (puthash :phase phase my/runtime-context))
+  (puthash :state/phase phase my/runtime-context))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
-;; Capability helpers  (write to :fact/* namespace)
+;; Capability helpers
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/ctx-capability-p (cap)
-  "Return non-nil when capability CAP is set."
   (my/ctx-get cap nil))
 
 (defun my/ctx-declare-capabilities ()
   "Populate :fact/* slots from current Emacs environment.
-  Call once after platform detection.  Facts are immutable thereafter."
-  ;; Core facts
+  Call once.  All writes go through my/ctx-set so immutability is enforced."
   (my/ctx-set :fact/gui         (display-graphic-p))
   (my/ctx-set :fact/tty         (not (display-graphic-p)))
   (my/ctx-set :fact/os-linux    (eq system-type 'gnu/linux))
@@ -265,36 +310,20 @@
                                      (string= (or (getenv "XDG_SESSION_TYPE") "")
                                               "wayland")))
   (my/ctx-set :fact/emacs-version emacs-version)
-  ;; Keep legacy aliases in sync (read-only copy; no fact guard needed here
-  ;; because we puthash directly, bypassing the guard)
-  (dolist (pair '((:gui         . :fact/gui)
-                  (:tty         . :fact/tty)
-                  (:os-linux    . :fact/os-linux)
-                  (:os-macos    . :fact/os-macos)
-                  (:os-windows  . :fact/os-windows)
-                  (:native-comp . :fact/native-comp)
-                  (:treesit     . :fact/treesit)
-                  (:wayland     . :fact/wayland)))
-    (puthash (car pair)
-             (gethash (cdr pair) my/runtime-context)
-             my/runtime-context))
   (my/ctx-validate-invariants)
   (my/log-info "ctx" "capabilities declared [%s/%s]"
                (my/ctx-get-view :view/os-name)
                (my/ctx-get-view :view/display-type)))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
-;; Health log  (uses :state/health-log; :health-log is legacy alias)
+;; Health log
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/ctx-record-health (stage status)
   "Append STAGE STATUS pair to health log."
   (my/ctx-update :state/health-log
                  (lambda (log) (append log (list (cons stage status))))
-                 nil)
-  (puthash :health-log
-           (my/ctx-get :state/health-log)
-           my/runtime-context))
+                 nil))
 
 (defun my/ctx-health-summary ()
   "Return alist of (stage . status) pairs."
@@ -308,9 +337,10 @@
   "Initialise runtime context subsystem."
   (clrhash my/runtime-context)
   (clrhash my/ctx--facts-set)
-  (my/ctx-set :state/phase 'bootstrap)
-  (puthash :phase 'bootstrap my/runtime-context)
-  (my/log-info "ctx" "context initialised (fact/state/view layering active)"))
+  (clrhash my/ctx--legacy-read-warned)
+  (clrhash my/ctx--legacy-write-warned)
+  (puthash :state/phase 'bootstrap my/runtime-context)
+  (my/log-info "ctx" "context initialised (alias-canonicalization active)"))
 
 (provide 'runtime-context)
 ;;; runtime-context.el ends here

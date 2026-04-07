@@ -1,7 +1,4 @@
 ;;; runtime-stage.el --- Stage executor -*- lexical-binding: t; -*-
-;;; Commentary:
-;;;  No semantic changes.  Import list updated; my/runtime-stage-run
-;;;  is structurally identical to V1.  Included for completeness.
 ;;; Code:
 
 (require 'cl-lib)

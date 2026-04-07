@@ -1,14 +1,9 @@
 ;;; runtime-feature.el --- Hierarchical feature flag system -*- lexical-binding: t; -*-
 ;;; Commentary:
-;;;  1. Ancestor resolution has explicit cycle detection (fail-fast).
-;;;  2. Principle 5 enforced at code level:
-;;;       :feature = policy (profile may override)
-;;;       :when    = fact   (profile NEVER overrides)
-;;;     my/feature-apply-profile only touches registered feature defcustoms,
-;;;     never :when conditions.
-;;;  3. my/feature--ancestors now returns nil and logs a warning on cycle
-;;;     instead of looping forever.
-;;;  4. All feature declarations and profile definitions are identical to V1.
+;;;     - my/feature-list: sort bug fixed (symbol→string before compare)
+;;;     - registry: :value field removed; current value always via symbol-value
+;;;     - gate semantics: symbol-function gate removed; only variable or lambda
+;;;     - cycle guard
 ;;;
 ;;; Code:
 
@@ -20,7 +15,8 @@
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defvar my/feature--registry (make-hash-table :test #'eq)
-  "Map feature-symbol → plist (:value BOOL :parent SYMBOL :doc STRING :tags LIST).")
+  "Map feature-symbol → plist (:parent SYMBOL :doc STRING :tags LIST).
+  Note: current value is always (symbol-value sym), not stored here.")
 
 (defmacro my/deffeature (sym default doc &rest keys)
   "Declare feature flag SYM with DEFAULT and DOC.
@@ -32,21 +28,30 @@
        (defcustom ,sym ,default ,doc
          :type 'boolean :group 'my/features)
        (puthash ',sym
-                (list :value  ,default
-                      :parent ',parent
+                (list :parent ',parent
                       :doc    ,doc
                       :tags   ',tags)
                 my/feature--registry)
        ',sym)))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
-;; Gate resolver
+;; Gate resolver  (removed fboundp/symbol-function branch)
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/gate-resolve (gate)
-  "Resolve a single GATE expression to boolean.
-  nil/absent → t | t → t | SYMBOL → symbol-value | FN → funcall
-  (:and …) | (:or …) | (:not GATE)"
+  "Resolve GATE to boolean.
+
+  nil / absent  → t (no gate = always pass)
+  t             → t
+  (:and …)      → AND of sub-gates
+  (:or …)       → OR of sub-gates
+  (:not GATE)   → NOT sub-gate
+  SYMBOL        → (symbol-value SYMBOL)  [variable/feature flag only]
+  FUNCTION      → (funcall FUNCTION)     [lambda or closure, not symbol-function]
+
+  NOTE: Named functions must be passed explicitly as #'fn or
+  (function fn).  Bare symbols are treated as variables, not function refs.
+  This eliminates ambiguity when a symbol is both a variable and a function."
   (cond
    ((null gate)   t)
    ((eq gate t)   t)
@@ -56,24 +61,23 @@
     (cl-some #'my/gate-resolve (cdr gate)))
    ((and (listp gate) (eq (car gate) :not))
     (not (my/gate-resolve (cadr gate))))
-   ((and (symbolp gate) (boundp gate))
-    (not (null (symbol-value gate))))
+   ((symbolp gate)
+    (if (boundp gate)
+        (not (null (symbol-value gate)))
+      (my/log-warn "feature" "unresolved gate symbol: %S (not bound)" gate)
+      nil))
+   ;; Lambda / closure — explicit callable
    ((functionp gate)
     (not (null (funcall gate))))
-   ((and (symbolp gate) (fboundp gate))
-    (not (null (funcall gate))))
-   ((symbolp gate)
-    (my/log-warn "feature" "unresolved gate symbol: %S" gate)
-    nil)
    (t (not (null gate)))))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
-;; Ancestor resolution  (V2: cycle-safe)
+;; Ancestor resolution
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/feature--ancestors (sym)
-  "Return ordered ancestor list for feature SYM (nearest first).
-  Returns nil and logs a warning if a :parent cycle is detected."
+  "Return ordered ancestor list for SYM (nearest first).
+  Returns nil on cycle detection."
   (let ((spec    (gethash sym my/feature--registry))
         (visited (list sym))
         ancestors)
@@ -83,12 +87,9 @@
          ((null parent)
           (setq spec nil))
          ((memq parent visited)
-          ;; V2: explicit cycle guard
           (my/log-warn "feature"
-                       "cycle detected in :parent chain for %S at %S; aborting"
-                       sym parent)
-          (setq spec nil
-                ancestors nil))       ; discard partial chain on cycle
+                       "cycle in :parent chain for %S at %S; aborting" sym parent)
+          (setq spec nil ancestors nil))
          (t
           (push parent ancestors)
           (push parent visited)
@@ -107,15 +108,13 @@
 (defalias 'my/runtime-feature-enabled-p 'my/feature-enabled-p)
 
 ;; ─────────────────────────────────────────────────────────────────────────────
-;; Profile system  (policy only; :when conditions are never overridden)
+;; Profile system
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defvar my/feature--profiles (make-hash-table :test #'equal))
 
 (defun my/feature-define-profile (name overrides)
-  "Define feature profile NAME with OVERRIDES alist of (feature-symbol . bool).
-  Profiles only affect :feature flags (policy).  :when conditions are facts
-  and are never overridden by profiles — see Principle 5."
+  "Define feature profile NAME with OVERRIDES alist."
   (puthash name overrides my/feature--profiles))
 
 (defun my/feature-apply-profile (name)
@@ -124,7 +123,7 @@
     (unless overrides (user-error "Unknown feature profile: %s" name))
     (dolist (pair overrides)
       (when (and (boundp (car pair))
-                 (gethash (car pair) my/feature--registry)) ; registered = policy
+                 (gethash (car pair) my/feature--registry))
         (set (car pair) (cdr pair))
         (my/log-debug "feature" "profile=%s override %s=%s"
                       name (car pair) (cdr pair))))
@@ -135,12 +134,18 @@
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/feature-list ()
+  "Return sorted list of all declared feature symbols."
   (let (syms)
     (maphash (lambda (k _) (push k syms)) my/feature--registry)
-    (sort syms #'string<)))
+    ;; compare symbol-name strings, not symbols directly
+    (sort syms (lambda (a b) (string< (symbol-name a) (symbol-name b))))))
 
 (defun my/feature-info (sym)
-  (gethash sym my/feature--registry))
+  "Return registry metadata plist for feature SYM.
+  Current value is (symbol-value SYM), not in registry."
+  (let ((meta (gethash sym my/feature--registry)))
+    (when meta
+      (append (list :value (and (boundp sym) (symbol-value sym))) meta))))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
 ;; Built-in profiles
@@ -164,7 +169,7 @@
      (my/feature-app . nil))))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
-;; Feature declarations  (identical to V1)
+;; Feature declarations  (unchanged)
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defgroup my/features nil "Feature flags." :group 'my)

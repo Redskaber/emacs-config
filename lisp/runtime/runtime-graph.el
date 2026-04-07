@@ -1,11 +1,4 @@
 ;;; runtime-graph.el --- Stage dependency graph -*- lexical-binding: t; -*-
-;;; Commentary:
-;;;  1. Cycle detection error message now names the cycle path, not just
-;;;     the final count mismatch.
-;;;  2. my/runtime-graph--find-cycle is a standalone helper that returns
-;;;     the cycle as a list of stage names (for doctor/explain).
-;;;  3. Validation covers both unknown deps and self-dependency.
-;;;
 ;;; Code:
 
 (require 'cl-lib)

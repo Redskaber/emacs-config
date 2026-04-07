@@ -1,12 +1,4 @@
 ;;; runtime-module-runner.el --- Manifest module executor -*- lexical-binding: t; -*-
-;;; Commentary:
-;;;  1. Deferred completion loop is closed via observer event (not direct callback).
-;;;     my/runtime-module-on-deferred-complete is removed; lifecycle handles it.
-;;;  2. Every step transitions through my/lifecycle-transition for the
-;;;     authoritative state update.  runtime-module-state is still updated
-;;;     (for backward compat reporting) but is derived, not authoritative.
-;;;  3. Runner emits my/event-module-run directly for legacy subscribers.
-;;;
 ;;; Code:
 
 (require 'cl-lib)

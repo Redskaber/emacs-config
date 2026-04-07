@@ -1,13 +1,4 @@
 ;;; runtime-stage-state.el --- Stage execution state -*- lexical-binding: t; -*-
-;;; Commentary:
-;;;  1. my/runtime-stage-state-set accepts an optional REASON argument
-;;;     (passed through to my/stage-record :detail) for better diagnostics.
-;;;  2. Observer events now consistently carry `my/stage-record' structs.
-;;;  3. my/with-runtime-stage-state preserves started-at when updating
-;;;     an existing record (no regression vs V1).
-;;;  4. my/runtime-stage-state-summary is new: returns alist of
-;;;     (stage . status) for all known stages.
-;;;
 ;;; Code:
 
 (require 'cl-lib)

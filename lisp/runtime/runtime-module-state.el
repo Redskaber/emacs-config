@@ -1,16 +1,4 @@
 ;;; runtime-module-state.el --- Module execution state -*- lexical-binding: t; -*-
-;;; Commentary:
-;;;  1. :supersedes is now meaningful:
-;;;       - First record for a name: stored normally.
-;;;       - Subsequent records (deferred → final): new record is created with
-;;;         :supersedes = previous record; both are visible in the append-log.
-;;;     This makes the deferred→ok / deferred→failed transition auditable.
-;;;  2. my/runtime-module-record accepts an optional :supersedes override;
-;;;     callers may also let this module derive it automatically.
-;;;  3. «Degraded» stage detection is unchanged in semantics.
-;;;  4. Deferred jobs tracked here for reporting only; lifecycle state lives
-;;;     in runtime-lifecycle.
-;;;
 ;;; Code:
 
 (require 'cl-lib)

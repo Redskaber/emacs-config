@@ -1,12 +1,17 @@
 ;;; runtime-observer.el --- Runtime event bus -*- lexical-binding: t; -*-
 ;;; Commentary:
-;;; No semantic changes, minor hardening.
-;;;    - my/observer-emit returns the number of handlers that fired.
-;;;    - my/observer-emit-deferred accepts nil seconds (fires immediately
-;;;      after current command via run-with-idle-timer 0).
-;;;    - Standard event constants extended with :module/lifecycle and
-;;;      :deferred/complete (defined in runtime-lifecycle but declared here
-;;;      for discoverability; the defconsts in lifecycle.el take precedence).
+;;;     Priority hook dispatcher: add-hook's 3rd argument is APPEND (bool),
+;;;     not a priority integer.
+;;;
+;;;     Solution (Option B): Internal dispatcher function owns the hook slot.
+;;;     Handlers register into an internal priority-sorted list; the dispatcher
+;;;     calls them in order.  This gives true priority ordering while remaining
+;;;     100% backward-compatible with the my/observer-subscribe API.
+;;;
+;;;     Affected hooks: after-init-hook (trampoline) is in runtime-deferred.
+;;;     This module provides the general observer bus — trampolines in
+;;;     runtime-deferred use the same fix pattern independently.
+;;;
 ;;; Code:
 
 (require 'cl-lib)
@@ -31,7 +36,7 @@
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defvar my/observer--registry (make-hash-table :test #'eq)
-  "Map event-keyword → sorted list of `my/observer-sub'.")
+  "Map event-keyword → sorted list of my/observer-sub.")
 
 (defun my/observer--sort-subs (subs)
   (sort (copy-sequence subs)
@@ -45,13 +50,66 @@
            my/observer--registry))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
+;; Priority hook dispatcher
+;; ─────────────────────────────────────────────────────────────────────────────
+;; Problem: add-hook 3rd arg is APPEND (bool), not priority.
+;; Passing 90 is treated as non-nil APPEND, which is mostly harmless but
+;; is semantically wrong and prevents true priority ordering.
+;;
+;; Solution: a single dispatcher function owns each hook slot.  Callers
+;; register handlers into an internal table with a numeric priority;
+;; the dispatcher invokes them in sorted order.
+;;
+;; This table maps hook-symbol → sorted list of (priority . fn) pairs.
+
+(defvar my/observer--hook-dispatchers (make-hash-table :test #'eq)
+  "Map hook-symbol → sorted list of (priority . handler-fn).")
+
+(defun my/observer--hook-dispatcher (hook)
+  "Return (or create) the dispatcher thunk for HOOK.
+  The thunk calls all registered handlers in priority order."
+  (let ((sym (intern (format "my/observer--dispatch:%s" hook))))
+    (unless (fboundp sym)
+      (fset sym (lambda (&rest args)
+                  (let ((handlers (gethash hook my/observer--hook-dispatchers)))
+                    (dolist (pair handlers)
+                      (condition-case err
+                          (apply (cdr pair) args)
+                        (error
+                         (my/log-error "observer"
+                                       "hook dispatcher error hook=%s -> %S" hook err))))))))
+    sym))
+
+(defun my/observer-hook-add (hook priority fn)
+  "Register FN on HOOK at numeric PRIORITY.
+  Lower numbers run first.  This is the priority-correct alternative
+  to (add-hook hook fn 90)."
+  (let* ((handlers (gethash hook my/observer--hook-dispatchers))
+         (new-entry (cons priority fn))
+         (updated   (sort (cons new-entry
+                                (cl-remove-if (lambda (p) (equal (cdr p) fn)) handlers))
+                          (lambda (a b) (< (car a) (car b))))))
+    (puthash hook updated my/observer--hook-dispatchers)
+    (let ((dispatcher (my/observer--hook-dispatcher hook)))
+      ;; Add dispatcher with plain append=nil (correct usage)
+      (add-hook hook dispatcher))))
+
+(defun my/observer-hook-remove (hook fn)
+  "Remove FN from the priority dispatcher for HOOK."
+  (let ((updated (cl-remove-if (lambda (p) (equal (cdr p) fn))
+                               (gethash hook my/observer--hook-dispatchers))))
+    (puthash hook updated my/observer--hook-dispatchers)
+    (when (null updated)
+      (let ((dispatcher (my/observer--hook-dispatcher hook)))
+        (remove-hook hook dispatcher)))))
+
+;; ─────────────────────────────────────────────────────────────────────────────
 ;; Public API
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (cl-defun my/observer-subscribe (event label handler
                                         &key (priority 50) once filter)
-  "Subscribe HANDLER to EVENT under LABEL.
-  Re-subscribing with the same LABEL replaces the previous subscription."
+  "Subscribe HANDLER to EVENT under LABEL."
   (my/observer--remove-sub event label)
   (let ((sub (my/observer-sub--make
               :event    event
@@ -71,10 +129,9 @@
   (my/observer--remove-sub event label))
 
 (defun my/observer-emit (event &optional payload)
-  "Emit EVENT with PAYLOAD; return count of handlers fired.
-  Errors in handlers are caught and logged."
-  (let ((subs         (gethash event my/observer--registry))
-        (fired-count  0)
+  "Emit EVENT with PAYLOAD; return count of handlers fired."
+  (let ((subs        (gethash event my/observer--registry))
+        (fired-count 0)
         remove-these)
     (dolist (sub subs)
       (condition-case err
@@ -93,7 +150,7 @@
     fired-count))
 
 (defun my/observer-emit-deferred (event &optional payload seconds)
-  "Emit EVENT after SECONDS idle time (default 0 = next idle moment)."
+  "Emit EVENT after SECONDS idle time (default 0)."
   (run-with-idle-timer
    (or seconds 0) nil
    (lambda () (my/observer-emit event payload))))
@@ -114,7 +171,7 @@
 (defconst my/event-stage-start     :stage/start)
 (defconst my/event-stage-end       :stage/end)
 (defconst my/event-module-run      :module/run
-  "Legacy compat; prefer :module/lifecycle in V2 code.")
+  "Legacy compat; prefer :module/lifecycle in code.")
 (defconst my/event-module-deferred :module/deferred)
 (defconst my/event-init-complete   :init/complete)
 
@@ -123,12 +180,13 @@
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/observer-reset ()
-  "Clear all subscriptions."
-  (clrhash my/observer--registry))
+  "Clear all subscriptions and hook dispatchers."
+  (clrhash my/observer--registry)
+  (clrhash my/observer--hook-dispatchers))
 
 (defun my/runtime-observer-init ()
   (my/observer-reset)
-  (my/log-info "observer" "event bus initialised"))
+  (my/log-info "observer" "event bus initialised (priority-hook dispatcher active)"))
 
 (provide 'runtime-observer)
 ;;; runtime-observer.el ends here

@@ -1,7 +1,11 @@
 ;;; kernel-logging.el --- Leveled structured logger -*- lexical-binding: t; -*-
 ;;; Commentary:
-;;;   Structured leveled logger.
-;;;   Levels (ordered): trace < debug < info < warn < error
+;;;     - ring.el replaces manual list management
+;;;     - sink registry: dynamic register/unregister
+;;;     - entry gains :event :corr-id :span fields
+;;;     - built-in sinks: messages-sink, ring-sink
+;;;
+;;; Levels (ordered): trace < debug < info < warn < error
 ;;;
 ;;; Public API
 ;;; ----------
@@ -11,29 +15,15 @@
 ;;;   (my/log-warn   TAG FMT &rest ARGS)
 ;;;   (my/log-error  TAG FMT &rest ARGS)
 ;;;   (my/log-event  LEVEL TAG MESSAGE &rest KEYS)
-;;;   (my/log-set-level LEVEL)            ; change threshold at runtime
-;;;   (my/log-entries)                    ; inspect in-memory ring
-;;;
-;;; Notes
-;;; -----
-;;;   Backtrace capture is intentionally NOT handled here.
-;;;   Stack capture belongs to error boundaries / exception sites
-;;;   (see `kernel-errors.el`).
-;;;
-;;; Each entry is written to *Messages* and appended to an in-memory
-;;; ring buffer (`my/log--ring`) for ops/healthcheck/inspection.
-;;;
-;;; Ring entry shape
-;;; ----------------
-;;;   (:time FLOAT
-;;;    :level SYMBOL
-;;;    :tag STRING
-;;;    :msg STRING
-;;;    :data PLIST|NIL)
+;;;   (my/log-set-level LEVEL)
+;;;   (my/log-entries)
+;;;   (my/log-register-sink NAME FN)
+;;;   (my/log-unregister-sink NAME)
 ;;;
 ;;; Code:
 
 (require 'cl-lib)
+(require 'ring)
 
 ;; ---------------------------------------------------------------------------
 ;; Customization
@@ -48,13 +38,9 @@
   "Alist mapping level symbol -> numeric priority.")
 
 (defcustom my/log-level 'debug
-  "Minimum log level to emit.
-  One of: trace, debug, info, warn, error."
-  :type '(choice (const trace)
-                 (const debug)
-                 (const info)
-                 (const warn)
-                 (const error))
+  "Minimum log level to emit."
+  :type '(choice (const trace) (const debug) (const info)
+                 (const warn) (const error))
   :group 'my/logging)
 
 (defcustom my/log-ring-size 512
@@ -63,78 +49,90 @@
   :group 'my/logging)
 
 ;; ---------------------------------------------------------------------------
-;; Internal ring buffer
+;; Internal ring buffer  (use ring.el)
 ;; ---------------------------------------------------------------------------
 
 (defvar my/log--ring nil
-  "Recent log entries (newest first).
-  Each entry is a plist:
-    (:time FLOAT :level SYMBOL :tag STRING :msg STRING :data PLIST|NIL).")
+  "ring.el ring holding recent log entries (newest first).")
 
-(defvar my/log--ring-count 0
-  "Number of entries currently stored in `my/log--ring'.")
-
-(defun my/log--ring-trim ()
-  "Trim `my/log--ring' to `my/log-ring-size'."
-  (when (> my/log--ring-count my/log-ring-size)
-    ;; Keep newest `my/log-ring-size' entries.
-    (setcdr (nthcdr (1- my/log-ring-size) my/log--ring) nil)
-    (setq my/log--ring-count my/log-ring-size)))
+(defun my/log--ring-ensure ()
+  (unless (ring-p my/log--ring)
+    (setq my/log--ring (make-ring my/log-ring-size))))
 
 (defun my/log--ring-push (entry)
-  "Push ENTRY into the ring buffer, evicting oldest when full."
-  (push entry my/log--ring)
-  (cl-incf my/log--ring-count)
-  (my/log--ring-trim))
+  (my/log--ring-ensure)
+  (ring-insert my/log--ring entry))
 
 (defun my/log-entries ()
-  "Return recent log entries as a fresh list (newest first)."
-  (copy-sequence my/log--ring))
+  "Return recent log entries as a list (newest first)."
+  (my/log--ring-ensure)
+  (ring-elements my/log--ring))
 
 (defun my/log-clear ()
   "Clear in-memory log ring."
   (interactive)
-  (setq my/log--ring nil
-        my/log--ring-count 0)
-  (my/log-info "logging" "log ring cleared"))
+  (setq my/log--ring (make-ring my/log-ring-size))
+  ;; avoid recursion: write directly to *Messages*
+  (message "[INFO][logging] log ring cleared"))
+
+;; ---------------------------------------------------------------------------
+;; Sink registry
+;; ---------------------------------------------------------------------------
+
+(defvar my/log--sinks (make-hash-table :test #'eq)
+  "Map sink-name-symbol → function (entry).
+  Each sink receives a raw entry plist and may do anything with it.")
+
+(defun my/log-register-sink (name fn)
+  "Register sink NAME (symbol) calling FN on every log entry."
+  (unless (symbolp name) (error "sink name must be a symbol"))
+  (unless (functionp fn) (error "sink fn must be callable"))
+  (puthash name fn my/log--sinks))
+
+(defun my/log-unregister-sink (name)
+  "Remove sink NAME."
+  (remhash name my/log--sinks))
+
+(defun my/log--dispatch-sinks (entry)
+  "Send ENTRY to all registered sinks, catching errors."
+  (maphash (lambda (_name fn)
+             (condition-case err
+                 (funcall fn entry)
+               (error (message "[ERROR][logging] sink error: %S" err))))
+           my/log--sinks))
 
 ;; ---------------------------------------------------------------------------
 ;; Helpers
 ;; ---------------------------------------------------------------------------
 
 (defun my/log--level-value (level)
-  "Return numeric priority of LEVEL, or 999 for unknown."
   (or (cdr (assq level my/log-levels)) 999))
 
 (defun my/log-level-valid-p (level)
-  "Return non-nil when LEVEL is a known log level symbol."
   (assq level my/log-levels))
 
 (defun my/log--should-emit-p (level)
-  "Return non-nil when LEVEL passes current threshold."
   (>= (my/log--level-value level)
       (my/log--level-value my/log-level)))
 
 (defun my/log--prefix (level)
-  "Return display prefix string for LEVEL."
   (upcase (symbol-name level)))
 
 ;; ---------------------------------------------------------------------------
-;; Core emit (structured)
+;; Core emit  (:event :corr-id :span fields added)
 ;; ---------------------------------------------------------------------------
 
-(cl-defun my/log-event (level tag message &key data)
+(cl-defun my/log-event (level tag message
+                               &key data event corr-id span)
   "Emit a structured log event.
 
-  LEVEL is one of `my/log-levels'.
-  TAG is a subsystem tag string.
-  MESSAGE is the user-visible summary line.
-  DATA is optional structured payload (plist) stored in the ring only.
-
-  Example:
-    (my/log-event
-    'error \"errors\" \"init failed\"
-    :data '(:kind handled :label \"boot\" :error (file-missing ...)))"
+  LEVEL  — one of `my/log-levels'.
+  TAG    — subsystem tag string.
+  MESSAGE — user-visible summary.
+  DATA   — optional payload plist (stored in ring only).
+  EVENT  — optional domain event keyword (e.g. :runtime/module-started).
+  CORR-ID — optional correlation id (module name, stage name, etc.).
+  SPAN   — optional span/trace data."
   (unless (my/log-level-valid-p level)
     (error "Unknown log level: %S" level))
   (unless (stringp tag)
@@ -145,44 +143,46 @@
     (error "DATA must be a plist/list or nil, got: %S" data))
   (when (my/log--should-emit-p level)
     (let* ((line  (format "[%s][%s] %s" (my/log--prefix level) tag message))
-           (entry (list :time  (float-time)
-                        :level level
-                        :tag   tag
-                        :msg   message
-                        :data  data)))
+           (entry (list :time     (float-time)
+                        :level    level
+                        :tag      tag
+                        :msg      message
+                        :data     data
+                        :event    event
+                        :corr-id  corr-id
+                        :span     span)))
+      ;; Built-in messages sink
       (message "%s" line)
-      (my/log--ring-push entry))))
+      ;; Built-in ring sink
+      (my/log--ring-push entry)
+      ;; External sinks
+      (my/log--dispatch-sinks entry))))
 
 (defun my/log--emit (level tag fmt &rest args)
-  "Internal compatibility layer for printf-style logging."
+  "Internal printf-style logging via my/log-event."
   (my/log-event level tag (apply #'format fmt args)))
 
 ;; ---------------------------------------------------------------------------
-;; Public level functions (compat layer)
+;; Public level functions
 ;; ---------------------------------------------------------------------------
 
 (defun my/log-trace (tag fmt &rest args)
-  "Log FMT/ARGS at TRACE level under TAG."
   (apply #'my/log--emit 'trace tag fmt args))
 
 (defun my/log-debug (tag fmt &rest args)
-  "Log FMT/ARGS at DEBUG level under TAG."
   (apply #'my/log--emit 'debug tag fmt args))
 
 (defun my/log-info (tag fmt &rest args)
-  "Log FMT/ARGS at INFO level under TAG."
   (apply #'my/log--emit 'info tag fmt args))
 
 (defun my/log-warn (tag fmt &rest args)
-  "Log FMT/ARGS at WARN level under TAG."
   (apply #'my/log--emit 'warn tag fmt args))
 
 (defun my/log-error (tag fmt &rest args)
-  "Log FMT/ARGS at ERROR level under TAG."
   (apply #'my/log--emit 'error tag fmt args))
 
 ;; ---------------------------------------------------------------------------
-;; Convenience: runtime control
+;; Runtime control
 ;; ---------------------------------------------------------------------------
 
 (defun my/log-set-level (level)
@@ -204,8 +204,8 @@
 
 (defun my/kernel-logging-init ()
   "Initialise logging subsystem."
-  (setq my/log--ring nil
-        my/log--ring-count 0)
+  (setq my/log--ring (make-ring my/log-ring-size))
+  (clrhash my/log--sinks)
   (my/log-info "logging" "kernel logger initialised (level=%s ring=%d)"
                my/log-level my/log-ring-size))
 

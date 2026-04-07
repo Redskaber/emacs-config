@@ -206,3 +206,49 @@ project  vcs    prog
 - app 是“面向用户工作流的应用聚合层”，不是语言层的一部分。
 
 
+## TODO
+
+### P0 优先级
+
+### P1 优先级
+
+### P2 优先级
+
+- **[P2]: TODO-001**: `runtime-graph` 拆分为stage和module两层
+  - **问题**: stage graph和module graph语义混杂
+  - **实施方案**:
+    - 创建`runtime-stage-graph.el`（粗粒度启动阶段）
+    - 创建`runtime-module-graph.el`（细粒度模块依赖）
+    - 保持各自独立的DAG和拓扑排序逻辑
+
+### P3 优先级
+
+**[P3]: TODO-001**: runtime分层架构收敛
+  - **实施方案**:
+    - **Layer 1 - Kernel primitives**:
+      - kernel-logging, kernel-errors
+      - runtime-observer, runtime-types
+      - ...
+    - **Layer 2 - Runtime state model**:
+      - runtime-context, runtime-feature
+      - runtime-registry
+      - ...
+    - **Layer 3 - Runtime executor**:
+      - runtime-stage-graph, runtime-module-graph
+      - runtime-lifecycle, runtime-deferred
+      - ...
+    - **Layer 4 - Runtime observability**:
+      - runtime-doctor, ops-healthcheck
+      - ops-profiler, ops-benchmark
+      - ...
+
+### P4 优先级
+
+- **[P4]: TODO-001**: 实现 `runtime-context` view自动计算缓存
+  - **方案**: 为view添加缓存机制
+    - 记录view依赖的fact/state keys
+    - 当依赖变化时自动失效缓存
+    - 提升高频访问view的性能
+    - ...
+
+

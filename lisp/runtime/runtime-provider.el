@@ -1,10 +1,4 @@
 ;;; runtime-provider.el --- Provider lifecycle abstraction -*- lexical-binding: t; -*-
-;;; Commentary:
-;;;  1. :teardown slot added (optional cleanup thunk, called on force-reset).
-;;;  2. my/provider-teardown executes the teardown thunk safely.
-;;;  3. my/provider-describe updated to include :tags.
-;;;  4. Constructor and accessors otherwise identical to V1.
-;;;
 ;;; Code:
 
 (require 'cl-lib)

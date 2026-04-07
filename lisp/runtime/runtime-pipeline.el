@@ -1,12 +1,4 @@
 ;;; runtime-pipeline.el --- Runtime pipeline orchestration -*- lexical-binding: t; -*-
-;;; Commentary:
-;;;  1. Requires runtime-lifecycle and runtime-doctor.
-;;;  2. my/runtime-reset-state calls my/lifecycle-reset.
-;;;  3. my/runtime-force-reset-state additionally calls my/lifecycle-reset.
-;;;  4. my/runtime-final-report calls my/doctor-module-report and
-;;;     optionally my/doctor-print-slow-modules.
-;;;  5. Stage sequence unchanged: bootstrap → platform → kernel → stages → post-init.
-;;;
 ;;; Code:
 
 (require 'bootstrap-profile)
@@ -68,7 +60,7 @@
   "Emit execution summary including doctor report."
   (my/runtime-module-report)
   (my/runtime-module-deferred-report)
-  ;; V2: emit module-level report and slow-module analysis
+  ;; emit module-level report and slow-module analysis
   (my/doctor-module-report)
   (my/doctor-print-slow-modules 5)
   (my/observer-emit my/event-init-complete

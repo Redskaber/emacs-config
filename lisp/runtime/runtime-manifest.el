@@ -1,12 +1,4 @@
 ;;; runtime-manifest.el --- Manifest spec normalisation -*- lexical-binding: t; -*-
-;;; Commentary:
-;;;  1. Validation contract: my/runtime-manifest-validate-spec signals an
-;;;     error (not just a warning) for missing required keys.
-;;;  2. :predicate backward-compat alias preserved; warns, then maps to :when.
-;;;  3. Unknown key detection is unchanged (warn at trace level).
-;;;  4. New: my/runtime-manifest-validate can be called on an entire manifest
-;;;     list before execution to fail fast on bad specs.
-;;;
 ;;; Code:
 
 (require 'kernel-lib)
