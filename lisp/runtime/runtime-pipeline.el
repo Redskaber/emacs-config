@@ -1,4 +1,9 @@
 ;;; runtime-pipeline.el --- Runtime pipeline orchestration -*- lexical-binding: t; -*-
+;;; Commentary:
+;;;     - my/runtime-reset-state resets doctor evidence store.
+;;;     - my/runtime-final-report emits :runtime/* domain events via observer.
+;;;     - Layer ordering in require list matches four-layer model.
+;;;
 ;;; Code:
 
 (require 'bootstrap-profile)
@@ -6,6 +11,7 @@
 (require 'runtime-types)
 (require 'runtime-context)
 (require 'runtime-feature)
+;; Layer 3: executor
 (require 'runtime-observer)
 (require 'runtime-lifecycle)
 (require 'runtime-deferred)
@@ -20,19 +26,23 @@
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/runtime-reset-state ()
-  "Reset module/lifecycle records (safe for session re-entry).
-  Does NOT clear stage sentinels."
+  "Reset module/lifecycle/evidence records (safe for session re-entry).
+  Does NOT clear stage sentinels or deferred jobs."
   (my/runtime-module-state-reset)
-  (my/lifecycle-reset))
+  (my/lifecycle-reset)
+  ;; Reset doctor evidence so re-runs start clean
+  (when (fboundp 'my/doctor--evidence)
+    (clrhash my/doctor--evidence)))
 
 (defun my/runtime-force-reset-state ()
-  "Force-clear ALL runtime state including stage sentinels and deferred jobs.
-  Interactive use only."
+  "Force-clear ALL runtime state including stage sentinels and deferred jobs."
   (interactive)
   (my/deferred-reset)
   (my/runtime-module-state-reset)
   (my/lifecycle-reset)
-  (my/runtime-stage-state-clear))
+  (my/runtime-stage-state-clear)
+  (when (boundp 'my/doctor--evidence)
+    (clrhash my/doctor--evidence)))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
 ;; Stage plan
@@ -53,21 +63,24 @@
       (my/ctx-record-health stage (my/runtime-stage-state-status stage)))))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
-;; Final report  (includes doctor)
+;; Final report
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/runtime-final-report ()
-  "Emit execution summary including doctor report."
+  "Emit execution summary: module report, deferred report, doctor report."
   (my/runtime-module-report)
   (my/runtime-module-deferred-report)
-  ;; emit module-level report and slow-module analysis
   (my/doctor-module-report)
   (my/doctor-print-slow-modules 5)
-  (my/observer-emit my/event-init-complete
-                    (list :elapsed (float-time
-                                    (time-subtract (current-time)
-                                                   my/emacs-start-time))
-                          :gc-count gcs-done)))
+  (let ((elapsed (float-time
+                  (time-subtract (current-time) my/emacs-start-time))))
+    (my/log-event
+     'info "pipeline"
+     (format "init complete: elapsed=%.3fs gc=%d" elapsed gcs-done)
+     :event   :runtime/init-complete
+     :data    (list :elapsed elapsed :gc-count gcs-done))
+    (my/observer-emit my/event-init-complete
+                      (list :elapsed elapsed :gc-count gcs-done))))
 
 (provide 'runtime-pipeline)
 ;;; runtime-pipeline.el ends here

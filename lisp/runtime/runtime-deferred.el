@@ -105,6 +105,7 @@
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/deferred--make-trampoline (name hook-sym _prio)
+  "Create a skip function that executes with a delay."
   (let ((sym (my/deferred--intern (format "my/deferred:%s" name))))
     (fset sym
           (lambda (&rest _)

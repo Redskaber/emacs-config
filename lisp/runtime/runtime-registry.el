@@ -1,8 +1,15 @@
 ;;; runtime-registry.el --- Runtime access to stage registry -*- lexical-binding: t; -*-
+;;; Commentary:
+;;;     - my/runtime-stage-enabled-p logs the gate result at debug level
+;;;       with :event :runtime/stage-gate-checked for traceability.
+;;;     - No structural changes; this module is a thin adapter over
+;;;       manifest-registry and runtime-feature.
+;;;
 ;;; Code:
 
 (require 'seq)
 (require 'kernel-lib)
+(require 'kernel-logging)
 (require 'runtime-feature)
 (require 'manifest-registry)
 
@@ -35,8 +42,16 @@
   (plist-get (my/runtime-stage-spec stage) :feature))
 
 (defun my/runtime-stage-enabled-p (stage)
-  "Return non-nil when STAGE feature gate passes."
-  (my/runtime-feature-enabled-p (my/runtime-stage-feature-gate stage)))
+  "Return non-nil when STAGE feature gate passes.
+  Logs gate result at debug level with domain event tag."
+  (let* ((gate   (my/runtime-stage-feature-gate stage))
+         (result (my/runtime-feature-enabled-p gate)))
+    (my/log-event
+     'debug "registry"
+     (format "stage gate: %s gate=%S → %s" stage gate result)
+     :event   :runtime/stage-gate-checked
+     :corr-id stage)
+    result))
 
 (provide 'runtime-registry)
 ;;; runtime-registry.el ends here

@@ -1,4 +1,10 @@
 ;;; runtime-module-state.el --- Module execution state -*- lexical-binding: t; -*-
+;;; Commentary:
+;;;     - my/runtime-module-history uses my/module-record-chain (type helper).
+;;;     - Domain event :module/run kept for compat; :runtime/* protocol is in lifecycle.
+;;;     - my/make-deferred-job called with trigger+trigger-data.
+;;;     - my/runtime-module-record no longer double-writes; supersedes chain is canonical.
+;;;
 ;;; Code:
 
 (require 'cl-lib)
@@ -28,8 +34,8 @@
 (defun my/runtime-module-state-reset ()
   "Clear all module execution state."
   (clrhash my/module--table)
-  (setq my/module--log       nil
-        my/module--deferred-jobs nil))
+  (setq my/module--log            nil
+        my/module--deferred-jobs  nil))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
 ;; Record API
@@ -38,17 +44,14 @@
 (defun my/runtime-module-record (record)
   "Store RECORD in state tables.
 
-  If a record for the same name already exists:
-    - The new record's :supersedes is set to the previous record (when
-      the caller did not already set it).
-    - Both old and new appear in the append-log.
-    - The latest-table entry is overwritten (latest-wins for dependency
-      resolution)."
+  If a record for the same name already exists and the caller did not
+  already set :supersedes, auto-attach the previous record.  The
+  latest-table is overwritten (latest-wins for dependency resolution).
+  The append-log retains every record for audit."
   (cl-assert (my/module-record-p record) t
              "my/runtime-module-record: expected my/module-record struct")
   (let* ((name     (my/module-record-name record))
          (existing (gethash name my/module--table))
-         ;; Build final record: attach :supersedes when caller omitted it
          (final    (if (and existing
                             (null (my/module-record-supersedes record)))
                        (my/make-module-record
@@ -63,6 +66,7 @@
                      record)))
     (puthash name final my/module--table)
     (push final my/module--log)
+    ;; Compat event: domain events are emitted by runtime-lifecycle
     (my/observer-emit my/event-module-run final)
     final))
 
@@ -79,14 +83,10 @@
 
 (defun my/runtime-module-history (name)
   "Return chronological list of all records for NAME (oldest first).
-  Traverses :supersedes chain from the latest record."
-  (let ((latest (my/runtime-module-find-record name))
-        chain)
-    (let ((rec latest))
-      (while rec
-        (push rec chain)
-        (setq rec (my/module-record-supersedes rec))))
-    chain))                     ; already oldest-first after push+nreverse
+  Uses my/module-record-chain on the latest record."
+  (let ((latest (my/runtime-module-find-record name)))
+    (when latest
+      (my/module-record-chain latest))))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
 ;; Dependency satisfaction
@@ -102,7 +102,7 @@
     (cl-every #'my/runtime-module-satisfied-p dep-list)))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
-;; Deferred job API
+;; Deferred job API (my/make-deferred-job accepts trigger info)
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun my/runtime-module-register-deferred-job (job)
@@ -154,9 +154,11 @@
     (when jobs
       (my/log-info "modules" "deferred: %d scheduled" (length jobs))
       (dolist (job jobs)
-        (my/log-debug "modules" "  deferred %s strategy=%S"
-                      (my/deferred-job-name job)
-                      (my/deferred-job-strategy job))))))
+        (my/log-debug "modules" "  deferred %s strategy=%S trigger=%S"
+                      (my/deferred-job-name      job)
+                      (my/deferred-job-strategy  job)
+                      (my/deferred-job-trigger   job))))))
 
 (provide 'runtime-module-state)
 ;;; runtime-module-state.el ends here
+

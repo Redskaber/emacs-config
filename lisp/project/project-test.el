@@ -29,8 +29,7 @@
 
 (defvar my/project-test-command-provider-functions nil
   "Hook-like list of functions that return a test command string or nil.
-
-Each function is called with one argument ROOT.")
+  Each function is called with one argument ROOT.")
 
 (defun my/project-test--root ()
   "Return test root."
@@ -66,7 +65,7 @@ Each function is called with one argument ROOT.")
 
 (defun my/project-test (&optional edit)
   "Run tests for current project.
-With prefix EDIT, prompt for command."
+  With prefix EDIT, prompt for command."
   (interactive "P")
   (let* ((default-directory (my/project-test--root))
          (default-cmd (my/project-test-default-command))
@@ -79,7 +78,7 @@ With prefix EDIT, prompt for command."
   "Set project-local test COMMAND for current session."
   (interactive "sSet project test command: ")
   (setq-local my/project-test-command command)
-  (my/log-info "Project test command set: %s" command))
+  (my/log-info "project" "Project test command set: %s" command))
 
 (defun my/project-test-file ()
   "Run test command for current file if a provider exists, else fallback."
@@ -96,7 +95,7 @@ With prefix EDIT, prompt for command."
                                                     (my/project-test t)))
   (define-key my/project-mode-map (kbd "C-c p v") #'my/project-test-file)
   (define-key my/project-mode-map (kbd "C-c p -") #'my/project-set-test-command)
-  (my/log-info "project-test initialized."))
+  (my/log-info "project" "project-test initialized."))
 
 (provide 'project-test)
 ;;; project-test.el ends here

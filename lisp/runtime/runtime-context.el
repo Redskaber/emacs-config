@@ -50,7 +50,7 @@
      ((string-prefix-p ":fact/"  name) 'fact)
      ((string-prefix-p ":state/" name) 'state)
      ((string-prefix-p ":view/"  name) 'view)
-     (t                                 'legacy))))
+     (t                                'legacy))))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
 ;; Once-only legacy warning tables
@@ -79,10 +79,10 @@
   "Declare context slot KEY with TYPE, DOC, and optional :required."
   (declare (indent 2))
   `(puthash ,key
-            (list :type     ',type
+            (list :type    ',type
                   :doc      ,doc
                   :required ,(plist-get keys :required)
-                  :ns       ',(let ((name (symbol-name key)))
+                  :ns      ',(let ((name (symbol-name key)))
                                 (cond ((string-prefix-p ":fact/"  name) 'fact)
                                       ((string-prefix-p ":state/" name) 'state)
                                       ((string-prefix-p ":view/"  name) 'view)
@@ -112,8 +112,8 @@
 (my/ctx-defslot :view/display-type any "gui or tty string (computed).")
 
 ;; Legacy slots (no :required — they are pure aliases)
-(my/ctx-defslot :phase        symbol "Legacy alias → :state/phase.")
-(my/ctx-defslot :health-log   list   "Legacy alias → :state/health-log.")
+(my/ctx-defslot :phase        symbol  "Legacy alias → :state/phase.")
+(my/ctx-defslot :health-log   list    "Legacy alias → :state/health-log.")
 (my/ctx-defslot :gui          boolean "Legacy alias → :fact/gui.")
 (my/ctx-defslot :tty          boolean "Legacy alias → :fact/tty.")
 (my/ctx-defslot :os-linux     boolean "Legacy alias → :fact/os-linux.")
@@ -238,7 +238,7 @@
   (cond ((my/ctx-get :fact/os-macos)   "macOS")
         ((my/ctx-get :fact/os-linux)   "Linux")
         ((my/ctx-get :fact/os-windows) "Windows")
-        (t                              "unknown")))
+        (t                             "unknown")))
 
 (my/ctx-defview :view/display-type "gui or tty string."
   (if (my/ctx-get :fact/gui) "gui" "tty"))

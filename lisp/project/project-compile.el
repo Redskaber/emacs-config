@@ -85,7 +85,7 @@
   "Set project-local compile COMMAND for current session."
   (interactive "sSet project compile command: ")
   (setq-local my/project-compile-command command)
-  (my/log-info "Project compile command set: %s" command))
+  (my/log-info "project" "Project compile command set: %s" command))
 
 (defun my/project-compile-init ()
   "Initialize project compile workflow."
@@ -95,7 +95,7 @@
                                                     (my/project-compile t)))
   (define-key my/project-mode-map (kbd "C-c p R") #'my/project-recompile)
   (define-key my/project-mode-map (kbd "C-c p =") #'my/project-set-compile-command)
-  (my/log-info "project-compile initialized."))
+  (my/log-info "project" "project-compile initialized."))
 
 (provide 'project-compile)
 ;;; project-compile.el ends here

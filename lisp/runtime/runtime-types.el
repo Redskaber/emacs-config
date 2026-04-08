@@ -1,15 +1,12 @@
 ;;; runtime-types.el --- Canonical runtime type contracts -*- lexical-binding: t; -*-
 ;;; Commentary:
-;;;  1. Module status enumeration unified and expanded:
-;;;       planned → loading → loaded → deferred → running → ok / failed / skipped / cancelled
-;;;     Scheduler-internal states (scheduled/fired) removed from module domain;
-;;;     they live only inside runtime-deferred as deferred-obj.state.
-;;;  2. :supersedes slot added to my/module-record.
-;;;     When a deferred module transitions to a final state the new record
-;;;     carries :supersedes (the previous record) so both the latest-table
-;;;     (decision) and the append-log (audit) tell the full transition story.
-;;;  3. DeferredJob gains :fired-at for latency accounting.
-;;;  4. Constructor helpers validate :status membership at creation time.
+;;;     - DeferredJob gains :trigger and :trigger-data fields (aligns with
+;;;       payload enrichment in runtime-deferred).
+;;;     - my/module-record :supersedes chain helper: my/module-record-chain.
+;;;     - This file is the shared type contract and must not import from higher layers.
+;;;
+;;;  Module status (ordered lifecycle):
+;;;    planned → loading → loaded → deferred → running → ok / failed / skipped / cancelled
 ;;;
 ;;; Code:
 
@@ -55,6 +52,13 @@
 (defconst my/module-satisfied-statuses
   (list my/module-status-ok my/module-status-deferred)
   "Module statuses that satisfy an :after dependency.")
+
+(defconst my/module-terminal-statuses
+  (list my/module-status-ok
+        my/module-status-failed
+        my/module-status-skipped
+        my/module-status-cancelled)
+  "Terminal statuses — no further transitions possible.")
 
 ;; ─────────────────────────────────────────────────────────────────────────────
 ;; Stage status
@@ -108,10 +112,10 @@
 (defun my/make-module-record (&rest args)
   "Create a `my/module-record' from keyword ARGS.
 
-Required: :name :status
-Optional: :reason :after :defer :started-at :ended-at :supersedes
+  Required: :name :status
+  Optional: :reason :after :defer :started-at :ended-at :supersedes
 
-Signals `error' on missing required keys or unknown :status."
+  Signals `error' on missing required keys or unknown :status."
   (let ((name   (or (plist-get args :name)
                     (error "my/make-module-record: :name required")))
         (status (or (plist-get args :status)
@@ -127,6 +131,15 @@ Signals `error' on missing required keys or unknown :status."
      :started-at (plist-get args :started-at)
      :ended-at   (plist-get args :ended-at)
      :supersedes (plist-get args :supersedes))))
+
+(defun my/module-record-chain (record)
+  "Return chronological list of all records in the :supersedes chain.
+  Oldest record first, RECORD last.  Useful for full audit traversal."
+  (let (chain (r record))
+    (while r
+      (push r chain)
+      (setq r (my/module-record-supersedes r)))
+    chain))  ; push+no-reverse = oldest first
 
 ;; ─────────────────────────────────────────────────────────────────────────────
 ;; Struct: StageRecord
@@ -154,24 +167,31 @@ Signals `error' on missing required keys or unknown :status."
    :detail     (plist-get args :detail)))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
-;; Struct: DeferredJob  (adds :fired-at)
+;; Struct: DeferredJob  (adds :fired-at :trigger :trigger-data)
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (cl-defstruct (my/deferred-job
                (:constructor my/deferred-job--make)
                (:copier nil))
-  "Record of a scheduled deferred-init job."
+  "Scheduler record for a deferred-init job."
   (name         nil :read-only t)
   (strategy     nil :read-only t)
   (scheduled-at nil :read-only t)
-  (fired-at     nil               :documentation "float-time when the thunk actually ran."))
+  (trigger      nil :read-only t
+                :documentation "Trigger kind: after-init|hook|idle|timer|feature|command")
+  (trigger-data nil :read-only t
+                :documentation "Hook name / secs / feature sym / command sym")
+  (fired-at     nil
+                :documentation "float-time when the thunk actually ran."))
 
-(defun my/make-deferred-job (name strategy)
-  "Create a `my/deferred-job' for NAME with STRATEGY."
+(defun my/make-deferred-job (name strategy &optional trigger trigger-data)
+  "Create a my/deferred-job for NAME with STRATEGY."
   (my/deferred-job--make
    :name         (or name (error "my/make-deferred-job: name required"))
    :strategy     strategy
-   :scheduled-at (float-time)))
+   :scheduled-at (float-time)
+   :trigger      trigger
+   :trigger-data trigger-data))
 
 (provide 'runtime-types)
 ;;; runtime-types.el ends here

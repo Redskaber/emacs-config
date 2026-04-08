@@ -1,4 +1,9 @@
 ;;; runtime-stage-state.el --- Stage execution state -*- lexical-binding: t; -*-
+;;; Commentary:
+;;;     - my/with-runtime-stage-state emits :runtime/stage-entered and
+;;;       :runtime/stage-finished domain events in addition to legacy
+;;;       :stage/start and :stage/end events (kept for compat).
+;;;
 ;;; Code:
 
 (require 'cl-lib)
@@ -11,7 +16,7 @@
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defvar my/stage--table (make-hash-table :test #'eq)
-  "Map stage-name-symbol → `my/stage-record'.")
+  "Map stage-name-symbol → my/stage-record.")
 
 ;; ─────────────────────────────────────────────────────────────────────────────
 ;; Accessors
@@ -87,13 +92,13 @@
     my/stage-status-ok))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
-;; Stage lifecycle macro
+;; Stage lifecycle macro (added domain events)
 ;; ─────────────────────────────────────────────────────────────────────────────
 
 (defmacro my/with-runtime-stage-state (stage &rest body)
   "Execute BODY under STAGE lifecycle tracking.
-  BODY should return a list of module status symbols.
-  Transitions: (absent)→running → ok|degraded|failed."
+  Emits :stage/start + :runtime/stage-entered on entry.
+  Emits :stage/end   + :runtime/stage-finished on exit."
   (declare (indent 1))
   `(cond
     ((my/runtime-stage-done-p ,stage)
@@ -105,28 +110,44 @@
      nil)
 
     (t
-     (let ((rec (my/runtime-stage-state-set ,stage my/stage-status-running)))
+     (let ((rec (my/runtime-stage-state-set ,stage my/stage-status-running))
+           (t-enter (float-time)))
+       ;; Legacy compat
        (my/observer-emit my/event-stage-start
-                         (list :stage ,stage :time (float-time) :record rec)))
+                         (list :stage ,stage :time t-enter :record rec))
+       ;; Domain event
+       (my/observer-emit my/event-runtime-stage-entered
+                         (list :stage ,stage :time t-enter :record rec)))
 
      (condition-case err
          (let* ((results (progn ,@body))
                 (status  (my/runtime-stage--compute-status
                           (if (listp results) results (list results))))
-                (rec     (my/runtime-stage-state-set ,stage status results)))
+                (rec     (my/runtime-stage-state-set ,stage status results))
+                (t-end   (float-time)))
+           ;; Legacy compat
            (my/observer-emit my/event-stage-end
                              (list :stage ,stage :status status
-                                   :time (float-time) :record rec))
+                                   :time t-end :record rec))
+           ;; Domain event
+           (my/observer-emit my/event-runtime-stage-finished
+                             (list :stage ,stage :status status
+                                   :time t-end :record rec))
            (when (eq status my/stage-status-degraded)
              (my/log-warn "stage" "DEGRADED: %s (some modules failed)" ,stage))
            results)
 
        (error
-        (let ((rec (my/runtime-stage-state-set ,stage my/stage-status-failed err)))
+        (let ((rec   (my/runtime-stage-state-set ,stage my/stage-status-failed err))
+              (t-end (float-time)))
           (my/observer-emit my/event-stage-end
                             (list :stage ,stage :status my/stage-status-failed
-                                  :time (float-time) :record rec)))
+                                  :time t-end :record rec))
+          (my/observer-emit my/event-runtime-stage-finished
+                            (list :stage ,stage :status my/stage-status-failed
+                                  :time t-end :record rec)))
         (signal (car err) (cdr err)))))))
 
 (provide 'runtime-stage-state)
 ;;; runtime-stage-state.el ends here
+

@@ -88,7 +88,7 @@
   (when (boundp 'project--list)
     (setq project--list
           (cl-remove-if-not #'file-directory-p project--list))
-    (my/log-info "Cleaned stale entries in project list.")))
+    (my/log-info "project" "Cleaned stale entries in project list.")))
 
 (defun my/project-browse-root ()
   "Browse project root in file manager / Dired."
@@ -105,7 +105,7 @@
 
 (defun my/project-shell-command (command)
   "Run shell COMMAND at project root."
-  (interactive "sProject shell command: ")
+  (interactive "Project shell command: ")
   (let ((default-directory (my/project-root-or-default)))
     (async-shell-command command)))
 
@@ -123,7 +123,7 @@
   "Initialize project core."
   (my/project-register-keybindings)
   (my/project-mode 1)
-  (my/log-info "project-core initialized."))
+  (my/log-info "project" "project-core initialized."))
 
 (provide 'project-core)
 ;;; project-core.el ends here

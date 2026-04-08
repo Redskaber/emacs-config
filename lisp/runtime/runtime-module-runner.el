@@ -1,8 +1,16 @@
 ;;; runtime-module-runner.el --- Manifest module executor -*- lexical-binding: t; -*-
+;;; Commentary:
+;;;     - my/provider-init called via my/try-call: distinguishes nil
+;;;       return from caught error, no false failures on init returning nil.
+;;;     - my/make-deferred-job passed trigger+trigger-data from provider.
+;;;     - my/provider-load also guarded with my/try-call for richer error info.
+;;;     - Structure unchanged; gate order preserved.
+;;;
 ;;; Code:
 
 (require 'cl-lib)
 (require 'kernel-logging)
+(require 'kernel-errors)
 (require 'runtime-types)
 (require 'runtime-feature)
 (require 'runtime-manifest)
@@ -10,6 +18,31 @@
 (require 'runtime-deferred)
 (require 'runtime-lifecycle)
 (require 'runtime-module-state)
+
+;; ─────────────────────────────────────────────────────────────────────────────
+;; Internal helpers
+;; ─────────────────────────────────────────────────────────────────────────────
+
+(defun my/runner--load (provider)
+  "Load provider via my/try-call.  Returns t on success, nil on failure."
+  (let ((result (my/try-call
+                 (my/provider-name provider)
+                 (lambda () (my/provider-load provider)))))
+    (if (plist-get result :ok)
+        (plist-get result :value)
+      ;; Error already logged by my/try-call / my/provider-load
+      nil)))
+
+(defun my/runner--init (provider)
+  "Run provider init via my/try-call.
+  Returns t on success, nil on error OR on legitimate nil return.
+  Note: init functions should return non-nil on success; nil is treated
+  as failure for safety.  If your init returns nil intentionally, wrap
+  it to return t."
+  (let ((result (my/try-call
+                 (my/provider-name provider)
+                 (lambda () (my/provider-init provider)))))
+    (plist-get result :ok)))
 
 ;; ─────────────────────────────────────────────────────────────────────────────
 ;; Single module execution
@@ -75,14 +108,13 @@
        ;; ── load (require) ───────────────────────────────────────────────
        (t
         (my/lifecycle-transition name my/module-status-loading)
-        (if (not (my/provider-load provider))
+        (if (not (my/runner--load provider))
             (progn
               (my/lifecycle-transition name my/module-status-failed
                                        :reason my/reason-require-failed)
               (my/runtime-module-record
-               (my/make-module-record
-                :name name :status my/module-status-failed
-                :reason my/reason-require-failed))
+               (my/make-module-record :name name :status my/module-status-failed
+                                      :reason my/reason-require-failed))
               (my/log-warn "runner" "failed(load): %s" name)
               my/module-status-failed)
 
@@ -92,16 +124,19 @@
           (cond
            ;; ── deferred ────────────────────────────────────────────────
            (defer
-            (let ((init-fn (my/provider-init-fn provider)))
-              (my/lifecycle-transition name my/module-status-deferred
-                                       :defer defer)
-              (my/deferred-schedule name init-fn defer)
+            (let* ((init-fn     (my/provider-init-fn provider))
+                   ;; Schedule first to get trigger info from deferred-obj
+                   (deferred-obj (my/deferred-schedule name init-fn defer))
+                   (trigger      (my/deferred-obj-trigger      deferred-obj))
+                   (trigger-data (my/deferred-obj-trigger-data deferred-obj)))
+              (my/lifecycle-transition name my/module-status-deferred :defer defer)
               (my/runtime-module-register-deferred-job
-               (my/make-deferred-job name defer))
+               (my/make-deferred-job name defer trigger trigger-data))
               (my/runtime-module-record
-               (my/make-module-record
-                :name name :status my/module-status-deferred :defer defer))
-              (my/log-debug "runner" "deferred: %s strategy=%S" name defer)
+               (my/make-module-record :name name :status my/module-status-deferred
+                                      :defer defer))
+              (my/log-debug "runner" "deferred: %s strategy=%S trigger=%S"
+                            name defer trigger)
               my/module-status-deferred))
 
            ;; ── synchronous init ────────────────────────────────────────
@@ -109,14 +144,14 @@
             (let* ((t0     (float-time))
                    (_      (my/lifecycle-transition name my/module-status-running
                                                     :started-at t0))
-                   (ok     (my/provider-init provider))
+                   ;; use my/try-call — nil return ≠ error
+                   (ok     (my/runner--init provider))
                    (t1     (float-time))
                    (status (if ok my/module-status-ok my/module-status-failed)))
               (my/lifecycle-transition
                name status
                :reason     (unless ok my/reason-init-failed)
-               :started-at t0
-               :ended-at   t1)
+               :started-at t0 :ended-at t1)
               (my/runtime-module-record
                (my/make-module-record
                 :name name :status status
