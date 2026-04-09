@@ -6,4 +6,5 @@ elpa
 var
 # files
 places
+*.txt
 
